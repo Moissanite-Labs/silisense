@@ -1,0 +1,45 @@
+name: SiliSense Pure-Stdlib CPU Verification (3-Mode Isolated)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-r4-r5:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install SiliSense (zero external dependencies)
+        run: |
+          python3 -m pip install --no-build-isolation --no-deps -e .
+      - name: Run 3-mode isolated -I test parity (0 bare asserts, 0 skips, 0 sensor opens)
+        env:
+          CUDA_VISIBLE_DEVICES: ""
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          python3 -I -B tests/run_all.py > /tmp/silisense_b.json
+          python3 -I -O -B tests/run_all.py > /tmp/silisense_ob.json
+          python3 -I -B -W error tests/run_all.py > /tmp/silisense_we.json
+          diff -u /tmp/silisense_b.json /tmp/silisense_ob.json
+          diff -u /tmp/silisense_b.json /tmp/silisense_we.json
+          cat /tmp/silisense_b.json
+      - name: Run PREREG-S115 CPU preflight across 3 isolated R4 modes
+        env:
+          CUDA_VISIBLE_DEVICES: ""
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          python3 -I -B silisense/benchmarks/prereg_s115_suite.py --cpu-preflight --json > /tmp/s115_b.json
+          python3 -I -O -B silisense/benchmarks/prereg_s115_suite.py --cpu-preflight --json > /tmp/s115_ob.json
+          python3 -I -B -W error silisense/benchmarks/prereg_s115_suite.py --cpu-preflight --json > /tmp/s115_we.json
+          diff -u /tmp/s115_b.json /tmp/s115_ob.json
+          diff -u /tmp/s115_b.json /tmp/s115_we.json
