@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import ast
 from fractions import Fraction
+import hashlib
+import itertools
 import json
 from pathlib import Path
 import re
@@ -92,7 +94,11 @@ class TestRazorR5(unittest.TestCase):
         self.assertEqual(ded_count, 120)
 
         # Honest upper-bit disclosure: LSB-only misses 48/48 in bits 1..3;
-        # folded parity, rotated bit-plane, and CRC-16 each catch 48/48.
+        # folded parity and CRC-16 each catch 48/48 on EVERY epoch (incl. epoch 0);
+        # rotated bit-plane b = epoch & 3 catches {epoch 0: 0/48, epochs 1..3: 16/48}
+        # with exact 48/48 union across any 4 consecutive epochs.
+        rotated_per_epoch: dict[int, int] = {0: 0, 1: 0, 2: 0, 3: 0}
+        rotated_union: set[tuple[int, int]] = set()
         for lane in range(16):
             for bp in (1, 2, 3):
                 cu = rz.inject_nibble_bit_flip(clean, lane, bp)
@@ -100,18 +106,28 @@ class TestRazorR5(unittest.TestCase):
                 self.assertEqual(lsb_only["status"], "CLEAN")
                 self.assertEqual(lsb_only["pcie_atomic_writes"], 0)
 
-                r_fold = rz.a16_inline_secded_step(cu, expected_upper_fold_bit=fold_bit)
+                r_fold = rz.a16_inline_secded_step(cu, epoch_u32=0, expected_upper_fold_bit=fold_bit)
                 self.assertEqual(r_fold["status"], "NON_LSB_FAULT")
                 self.assertEqual(r_fold["non_lsb_delta"], 1)
 
-                r_rot = rz.a16_inline_secded_step(cu, epoch_u32=4 + bp, expected_plane_syndromes=plane_synds)
-                self.assertEqual(r_rot["status"], "NON_LSB_FAULT")
-                self.assertEqual(r_rot["rotated_plane"], bp)
-                self.assertEqual(r_rot["non_lsb_delta"], 1)
-
-                r_crc = rz.a16_inline_secded_step(cu, expected_crc16=crc16)
+                r_crc = rz.a16_inline_secded_step(cu, epoch_u32=0, expected_crc16=crc16)
                 self.assertEqual(r_crc["status"], "NON_LSB_FAULT")
                 self.assertEqual(r_crc["non_lsb_delta"], 1)
+
+                for ep in (0, 1, 2, 3):
+                    r_rot = rz.a16_inline_secded_step(cu, epoch_u32=4 + ep, expected_plane_syndromes=plane_synds)
+                    self.assertEqual(r_rot["rotated_plane"], ep)
+                    if ep == bp:
+                        self.assertEqual(r_rot["status"], "NON_LSB_FAULT")
+                        self.assertEqual(r_rot["non_lsb_delta"], 1)
+                        rotated_per_epoch[ep] += 1
+                        rotated_union.add((lane, bp))
+                    else:
+                        self.assertEqual(r_rot["status"], "CLEAN")
+                        self.assertEqual(r_rot["non_lsb_delta"], 0)
+
+        self.assertEqual(rotated_per_epoch, {0: 0, 1: 16, 2: 16, 3: 16})
+        self.assertEqual(len(rotated_union), 48)
 
     def test_02_canary64_wire_layout_and_exact_fail_closed_guards(self) -> None:
         c = rz.RazorCanary64(
@@ -727,7 +743,8 @@ class TestRazorR5(unittest.TestCase):
         self.assertTrue(cert["ded_120_of_120_pairs_detected"])
         self.assertTrue(cert["upper_bits_1_3_lsb_only_missed_48_of_48"])
         self.assertTrue(cert["upper_bits_1_3_folded_parity_caught_48_of_48"])
-        self.assertTrue(cert["upper_bits_1_3_rotated_plane_caught_48_of_48"])
+        self.assertEqual(cert["upper_bits_1_3_rotated_plane_per_epoch"], {"0": 0, "1": 16, "2": 16, "3": 16})
+        self.assertTrue(cert["upper_bits_1_3_rotated_plane_4epoch_union_48_of_48"])
         self.assertTrue(cert["upper_bits_1_3_crc16_caught_48_of_48"])
         self.assertTrue(cert["krein_holonomy_order_witness"]["scalar_I3_blind"])
         self.assertTrue(cert["krein_holonomy_order_witness"]["nonscalar_G3_splits_order"])
@@ -741,18 +758,40 @@ class TestRazorR5(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertEqual(json.loads(proc.stdout), cert)
 
-        # Sibling holosphere cross-repo profile_sha256 parity check when present locally
+        # Standalone pinned 128-combo HoloSphereTuningProfile.profile_sha256() contract digest
+        # (matches Moissanite-Labs/holosphere#3 @ 6f75548d across all 4x4x2x2x2 = 128 combos in CI)
+        combos_128 = list(
+            itertools.product(
+                ("auto", "cuda_sm86", "torch_cpu", "triton"),
+                (32, 64, 128, 256),
+                (1, 4),
+                (0.0, 2.5),
+                (None, 2),
+            )
+        )
+        self.assertEqual(len(combos_128), 128)
+        local_128 = [
+            HoloSphereTuningProfile(
+                backend=b, block_t=bt, microbatch_size=mb, inter_step_cooldown_ms=cd, r_loops_override=rl
+            ).profile_sha256()
+            for b, bt, mb, cd, rl in combos_128
+        ]
+        pinned_128_digest = "6e090bae706863f7b040e4bdba0077b2e07170b65260c7352a507376bf52c9f8"
+        self.assertEqual(hashlib.sha256("\n".join(local_128).encode("utf-8")).hexdigest(), pinned_128_digest)
+
+        # Sibling holosphere cross-repo 128/128 live profile_sha256 parity check when present locally
         holosphere_root = _REPO_ROOT.parent / "holosphere"
         if holosphere_root.is_dir():
-            p0 = HoloSphereTuningProfile(backend="cuda_sm86", block_t=128, inter_step_cooldown_ms=0.0)
             probe = (
-                f"import sys; sys.modules['torch']=None; sys.path.insert(0, {str(holosphere_root)!r}); "
-                "from holosphere.telemetry import HoloSphereTuningProfile; "
-                "print(HoloSphereTuningProfile(backend='cuda_sm86', block_t=128, inter_step_cooldown_ms=0.0).profile_sha256())"
+                f"import hashlib, itertools, sys; sys.modules['torch']=None; sys.path.insert(0, {str(holosphere_root)!r}); "
+                "from holosphere.telemetry import HoloSphereTuningProfile as HP; "
+                "cs=itertools.product(('auto','cuda_sm86','torch_cpu','triton'),(32,64,128,256),(1,4),(0.0,2.5),(None,2)); "
+                "hs=[HP(backend=b,block_t=bt,microbatch_size=mb,inter_step_cooldown_ms=cd,r_loops_override=rl).profile_sha256() for b,bt,mb,cd,rl in cs]; "
+                "print(hashlib.sha256('\\n'.join(hs).encode('utf-8')).hexdigest())"
             )
             hp = subprocess.run([sys.executable, "-I", "-B", "-c", probe], capture_output=True, text=True, check=False)
             self.assertEqual(hp.returncode, 0, hp.stderr)
-            self.assertEqual(hp.stdout.strip(), p0.profile_sha256())
+            self.assertEqual(hp.stdout.strip(), pinned_128_digest)
 
 
 if __name__ == "__main__":

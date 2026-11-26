@@ -252,6 +252,9 @@ def a16_inline_secded_step(
         )
         exp_rot = _req_int(expected_plane_syndromes[rot_plane], "expected_plane_syndromes[b]", "ERR_BAD_PLANE_SYNDS")
         require_ok(0 <= exp_rot <= 0x1F, "ERR_BAD_PLANE_SYNDS", f"plane syndrome out of 5-bit range: {exp_rot}")
+        # Plane 0 (epoch & 3 == 0) is the LSB plane already protected by inline [16, 11, 4] SECDED above;
+        # rotated-plane upper-bit catches are {0: 0/48, 1: 16/48, 2: 16/48, 3: 16/48} (48/48 4-epoch union),
+        # while expected_upper_fold_bit and expected_crc16 each close 48/48 on every epoch including epoch 0.
         if ded_delta == 0 and rot_plane > 0:
             cur_rot_synd = a16_secded_syndrome(a16_extract_bitplane16(healed, rot_plane))
             if cur_rot_synd != exp_rot:
@@ -971,7 +974,11 @@ class HoloSphereRazorController:
         *,
         rollback_buf: WeftHolonomyRollbackBuffer | None = None,
     ) -> dict[str, Any]:
-        """Immediate single-poll 3-tier Razor action that strictly respects active safety latches."""
+        """Immediate single-poll 3-tier Razor action that strictly respects active safety latches.
+
+        Note: `clean_streak`, `hold_remaining`, and `ded_latch_remaining` advance/decay only on
+        `N=256`-token epoch boundaries via `step_epoch()`, not on per-token single-poll `step()` calls.
+        """
         sec_delta, ded_delta, non_lsb_delta = self._consume_canary_deltas(canary, health, rollback_buf)
         rollback_receipt: dict[str, Any] | None = None
         if ded_delta > 0 or non_lsb_delta > 0:
@@ -1136,19 +1143,22 @@ def run_razor_selftest() -> dict[str, Any]:
 
     lsb_only_missed_upper = 0
     folded_caught_upper = 0
-    rotated_caught_upper = 0
     crc16_caught_upper = 0
+    rotated_per_epoch: dict[str, int] = {"0": 0, "1": 0, "2": 0, "3": 0}
+    rotated_union_pairs: set[tuple[int, int]] = set()
     for lane in range(16):
         for bp in (1, 2, 3):
             cu = inject_nibble_bit_flip(clean_nibs, lane, bp)
             if a16_inline_secded_step(cu)["status"] == "CLEAN":
                 lsb_only_missed_upper += 1
-            if a16_inline_secded_step(cu, expected_upper_fold_bit=fold_bit)["non_lsb_delta"] == 1:
+            if a16_inline_secded_step(cu, epoch_u32=0, expected_upper_fold_bit=fold_bit)["non_lsb_delta"] == 1:
                 folded_caught_upper += 1
-            if a16_inline_secded_step(cu, epoch_u32=bp, expected_plane_syndromes=plane_synds)["non_lsb_delta"] == 1:
-                rotated_caught_upper += 1
-            if a16_inline_secded_step(cu, expected_crc16=crc16)["non_lsb_delta"] == 1:
+            if a16_inline_secded_step(cu, epoch_u32=0, expected_crc16=crc16)["non_lsb_delta"] == 1:
                 crc16_caught_upper += 1
+            for ep in (0, 1, 2, 3):
+                if a16_inline_secded_step(cu, epoch_u32=ep, expected_plane_syndromes=plane_synds)["non_lsb_delta"] == 1:
+                    rotated_per_epoch[str(ep)] += 1
+                    rotated_union_pairs.add((lane, bp))
 
     return {
         "schema": "silisense.razor_selftest.v1",
@@ -1156,7 +1166,8 @@ def run_razor_selftest() -> dict[str, Any]:
         "ded_120_of_120_pairs_detected": ded_pairs == 120,
         "upper_bits_1_3_lsb_only_missed_48_of_48": lsb_only_missed_upper == 48,
         "upper_bits_1_3_folded_parity_caught_48_of_48": folded_caught_upper == 48,
-        "upper_bits_1_3_rotated_plane_caught_48_of_48": rotated_caught_upper == 48,
+        "upper_bits_1_3_rotated_plane_per_epoch": rotated_per_epoch,
+        "upper_bits_1_3_rotated_plane_4epoch_union_48_of_48": len(rotated_union_pairs) == 48,
         "upper_bits_1_3_crc16_caught_48_of_48": crc16_caught_upper == 48,
         "hysteresis_spec": {
             "epoch_tokens": EPOCH_TOKENS,
