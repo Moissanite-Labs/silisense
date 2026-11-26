@@ -945,7 +945,7 @@ class HoloSphereRazorController:
             inter_step_cooldown_ms=float(cooldown_q),
             r_loops_override=self.base_profile.r_loops_override,
         )
-        return {
+        out = {
             "tier": tier,
             "action": action,
             "sec_delta": sec_delta,
@@ -966,6 +966,9 @@ class HoloSphereRazorController:
             "canary_sha256": canary.canary_sha256(),
             "rollback_receipt": rollback_receipt,
         }
+        canon = json.dumps(out, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("ascii")
+        out["step_receipt_sha256"] = hashlib.sha256(canon).hexdigest()
+        return out
 
     def step(
         self,
@@ -976,8 +979,9 @@ class HoloSphereRazorController:
     ) -> dict[str, Any]:
         """Immediate single-poll 3-tier Razor action that strictly respects active safety latches.
 
-        Note: `clean_streak`, `hold_remaining`, and `ded_latch_remaining` advance/decay only on
-        `N=256`-token epoch boundaries via `step_epoch()`, not on per-token single-poll `step()` calls.
+        Fault polls (DED, non-LSB, or SEC) immediately reset `clean_streak` to `0` and arm
+        `hold_remaining` or `ded_latch_remaining`. Clean-streak increments and latch countdown
+        decays occur only on `N=256`-token epoch boundaries via `step_epoch()`.
         """
         sec_delta, ded_delta, non_lsb_delta = self._consume_canary_deltas(canary, health, rollback_buf)
         rollback_receipt: dict[str, Any] | None = None

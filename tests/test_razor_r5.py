@@ -793,6 +793,49 @@ class TestRazorR5(unittest.TestCase):
             self.assertEqual(hp.returncode, 0, hp.stderr)
             self.assertEqual(hp.stdout.strip(), pinned_128_digest)
 
+    def test_triple_lsb_aliasing_and_step_receipt_sha256(self) -> None:
+        orig_lanes = _make_clean_nibbles(0x3C7)
+        crc16 = rz.block_crc16_ccitt(orig_lanes)
+        sec_aliases = 0
+        crc_catches = 0
+        for l0, l1, l2 in itertools.combinations(range(16), 3):
+            flipped = rz.inject_nibble_bit_flip(orig_lanes, l0, 0)
+            flipped = rz.inject_nibble_bit_flip(flipped, l1, 0)
+            flipped = rz.inject_nibble_bit_flip(flipped, l2, 0)
+            bare_res = rz.a16_inline_secded_step(flipped, expected_crc16=None)
+            if bare_res["status"] == "SEC":
+                sec_aliases += 1
+            guarded_res = rz.a16_inline_secded_step(flipped, expected_crc16=crc16)
+            if guarded_res["status"] == "NON_LSB_FAULT" and guarded_res["non_lsb_delta"] == 1:
+                crc_catches += 1
+        self.assertEqual(sec_aliases, 560)
+        self.assertEqual(crc_catches, 560)
+
+        ctrl = rz.HoloSphereRazorController(
+            base_profile=HoloSphereTuningProfile(backend="cuda_sm86", block_t=128),
+            initial_margin_mv_q=Fraction(40, 1),
+            initial_power_cap_w_q=Fraction(100, 1),
+        )
+        healthy = rz.SiliSenseHealthSnapshotQ(Fraction(3, 4), Fraction(1, 10), 0, True)
+        for receipt in (
+            ctrl.step(rz.RazorCanary64(), healthy),
+            ctrl.step_epoch(rz.RazorCanary64(), healthy),
+        ):
+            digest = receipt["step_receipt_sha256"]
+            self.assertEqual(len(digest), 64)
+            self.assertTrue(all(ch in "0123456789abcdef" for ch in digest))
+            payload = {k: v for k, v in receipt.items() if k != "step_receipt_sha256"}
+            expected = hashlib.sha256(
+                json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("ascii")
+            ).hexdigest()
+            self.assertEqual(digest, expected)
+            tampered = dict(payload)
+            tampered["clean_streak"] = int(tampered["clean_streak"]) + 1
+            tampered_digest = hashlib.sha256(
+                json.dumps(tampered, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("ascii")
+            ).hexdigest()
+            self.assertNotEqual(tampered_digest, digest)
+
 
 if __name__ == "__main__":
     unittest.main()
