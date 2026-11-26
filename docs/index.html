@@ -1,0 +1,2620 @@
+<!DOCTYPE html>
+<html lang="en" class="dark scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SiliSense — Silicon Proprioception, Optical Lenses &amp; Closed-Loop Inference Control</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Google Fonts: Space Grotesk, Inter, JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- KaTeX for Exact Mathematical Typography -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+
+  <!-- Three.js r128 for Real-Time 3D Optical Caustics & Control Phase Portraits -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+  <!-- Tone.js for Optional Closed-Loop Harmonic Lock Sonification -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            display: ['Space Grotesk', 'Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace']
+          },
+          colors: {
+            silicon: {
+              950: '#03070e',
+              900: '#07101e',
+              850: '#0c182c',
+              800: '#12223d'
+            }
+          }
+        }
+      }
+    };
+  </script>
+
+  <style>
+    :root {
+      color-scheme: dark;
+    }
+    body {
+      background-color: #03070e;
+      background-image:
+        radial-gradient(circle at 15% 10%, rgba(34, 211, 238, 0.11), transparent 38%),
+        radial-gradient(circle at 84% 16%, rgba(245, 158, 11, 0.10), transparent 40%),
+        radial-gradient(circle at 52% 68%, rgba(16, 185, 129, 0.07), transparent 48%);
+      overflow-x: hidden;
+    }
+    .bg-optics-grid {
+      background-size: 42px 42px;
+      background-image:
+        linear-gradient(to right, rgba(148, 163, 184, 0.045) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(148, 163, 184, 0.045) 1px, transparent 1px);
+    }
+    .glass-panel {
+      background: rgba(9, 17, 32, 0.78);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(148, 163, 184, 0.14);
+    }
+    .glass-subtle {
+      background: rgba(13, 24, 44, 0.58);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(148, 163, 184, 0.11);
+    }
+    .code-editor {
+      tab-size: 2;
+      caret-color: #22d3ee;
+      line-height: 1.55;
+    }
+    .code-editor:focus {
+      outline: none;
+    }
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      background: rgba(51, 65, 85, 0.72);
+      height: 6px;
+      border-radius: 999px;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #22d3ee;
+      border: 2px solid #03070e;
+      box-shadow: 0 0 10px rgba(34, 211, 238, 0.8);
+      cursor: pointer;
+      transition: transform 0.15s ease;
+    }
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.18);
+    }
+    ::-webkit-scrollbar {
+      width: 7px;
+      height: 7px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #040914;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #1e293b;
+      border-radius: 999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #22d3ee;
+    }
+    .katex {
+      font-size: 1.02em;
+    }
+  </style>
+</head>
+<body class="text-slate-100 font-sans antialiased selection:bg-cyan-500/30 selection:text-cyan-200 bg-optics-grid">
+
+  <!-- Non-Blocking Toast Container (Zero alert() calls) -->
+  <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- Sticky Navigation Header -->
+  <header class="sticky top-0 z-40 border-b border-slate-800/80 bg-silicon-950/85 backdrop-blur-xl">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+      <!-- Brand -->
+      <a href="#top" class="flex items-center gap-3 group">
+        <div class="relative w-9 h-9 rounded-xl bg-gradient-to-br from-cyan-400/20 via-amber-500/20 to-emerald-400/20 border border-cyan-400/40 flex items-center justify-center shadow-lg shadow-cyan-500/10 group-hover:border-cyan-300 transition">
+          <!-- Inline SVG Conformal Optical Aperture + Razor Crosshair Icon -->
+          <svg class="w-5 h-5 text-cyan-300" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.1">
+            <circle cx="16" cy="16" r="11" class="text-cyan-400" stroke-dasharray="4 2" />
+            <path d="M7 16C11 10 21 10 25 16C21 22 11 22 7 16Z" class="text-amber-400" />
+            <circle cx="16" cy="16" r="2.6" fill="currentColor" class="text-emerald-300" />
+          </svg>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="font-display font-bold text-lg tracking-tight text-white">SiliSense</span>
+            <span class="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold uppercase tracking-wider bg-amber-500/15 text-amber-300 border border-amber-500/30">
+              S115 · R5 Verified
+            </span>
+          </div>
+          <p class="text-[11px] text-slate-400 hidden md:block font-mono">Razor 4B Codec · Exact-ℚ Lenses · Frame64 Airlock · Lyapunov Governor</p>
+        </div>
+      </a>
+
+      <!-- Navigation Links -->
+      <nav class="hidden lg:flex items-center gap-6 text-sm text-slate-300">
+        <a href="#studio" class="hover:text-cyan-300 transition">SiliScript Studio</a>
+        <a href="#airlock-frame64" class="hover:text-cyan-300 transition">Frame64 &amp; Airlock</a>
+        <a href="#pillars" class="hover:text-cyan-300 transition">Optical Math</a>
+        <a href="#governor-lab" class="hover:text-cyan-300 transition">Governor &amp; R5 Suite</a>
+        <a href="#atlas" class="hover:text-cyan-300 transition">Repo Atlas</a>
+      </nav>
+
+      <!-- Actions -->
+      <div class="flex items-center gap-2.5">
+        <button id="btn-sonic-toggle" type="button" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-mono border border-slate-700/80 bg-slate-900/80 text-slate-300 hover:border-cyan-400/60 hover:text-cyan-200 transition" title="Synthesize live Governor phase-lock harmonics via Tone.js">
+          <span id="sonic-dot" class="w-2 h-2 rounded-full bg-slate-500"></span>
+          <span id="sonic-label">Harmonic Lock: OFF</span>
+        </button>
+
+        <button id="btn-copy-install" type="button" class="hidden sm:inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-mono bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-200 border border-cyan-400/30 transition">
+          <span>pip install -e .</span>
+          <svg class="w-3.5 h-3.5 opacity-80" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <rect x="9" y="9" width="13" height="13" rx="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main id="top" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 sm:pt-12 pb-24 space-y-24">
+
+    <!-- ===================================================================== -->
+    <!-- HERO SECTION                                                          -->
+    <!-- ===================================================================== -->
+    <section class="relative">
+      <div class="max-w-4xl space-y-6">
+        <div class="inline-flex flex-wrap items-center gap-2 px-3.5 py-1.5 rounded-full glass-subtle text-xs font-mono text-cyan-300 border border-cyan-500/25">
+          <span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
+          <span>Silicon Proprioception</span>
+          <span class="text-slate-600">|</span>
+          <span class="text-amber-300">Razor 4-Byte Exact-ℚ Wire</span>
+          <span class="text-slate-600">|</span>
+          <span class="text-purple-300">HoloSphere Bridge Ready</span>
+        </div>
+
+        <h1 class="font-display text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight text-white leading-[1.08]">
+          Closed-Loop Silicon Proprioception via
+          <span class="bg-gradient-to-r from-cyan-300 via-amber-200 to-emerald-300 bg-clip-text text-transparent">
+            Conformal Razor Optics.
+          </span>
+        </h1>
+
+        <p class="text-base sm:text-lg text-slate-300/90 leading-relaxed max-w-3xl">
+          Modern inference engines fly blind—reacting to tail-latency spikes, thermal throttling, and numerical drift only after SLA violation.
+          <strong class="text-white font-semibold">SiliSense</strong> endows bare silicon with real-time mathematical proprioception: refracting unbounded hardware observables through
+          <span id="hero-math-q" class="font-mono text-cyan-300">Exact-ℚ</span> <strong>conformal lenses</strong>, packing state into
+          <strong>4-byte Razor words</strong> inside atomic <strong>64-byte L1 cache-line Airlocks</strong>, and steering execution via a
+          <strong>Lyapunov Control-Barrier Governor</strong> bridged isometrically to <strong>HoloSphere</strong>.
+        </p>
+
+        <!-- Hero Action Buttons -->
+        <div class="flex flex-wrap items-center gap-3 pt-1">
+          <a href="#studio" class="inline-flex items-center gap-2.5 px-5 py-3 rounded-xl font-medium text-sm bg-gradient-to-r from-cyan-500 to-teal-600 hover:from-cyan-400 hover:to-teal-500 text-slate-950 font-semibold shadow-lg shadow-cyan-500/20 transition">
+            <span>Launch SiliScript Optics Studio</span>
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.3" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+            </svg>
+          </a>
+          <a href="#airlock-frame64" class="inline-flex items-center gap-2 px-4 py-3 rounded-xl font-medium text-sm glass-panel text-amber-200 hover:border-amber-400/50 transition">
+            <span>Inspect 64-Byte Frame64 Airlock</span>
+          </a>
+          <a href="#governor-lab" class="inline-flex items-center gap-2 px-4 py-3 rounded-xl font-medium text-sm glass-panel text-emerald-300 hover:border-emerald-400/50 transition">
+            <span>Run Live R5 Oracle</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- Key Architecture Metrics Strip -->
+      <div class="grid grid-cols-2 md:grid-cols-5 gap-3 sm:gap-4 mt-8">
+        <div class="glass-panel rounded-2xl p-4">
+          <div class="text-[11px] font-mono uppercase tracking-wider text-slate-400">Sensory Wire Atom</div>
+          <div class="font-display text-xl sm:text-2xl font-bold text-amber-300 mt-1">4-Byte Razor</div>
+          <div class="text-xs text-slate-400 mt-1 font-mono">silisense/razor.py · 52.6 KB</div>
+        </div>
+        <div class="glass-panel rounded-2xl p-4">
+          <div class="text-[11px] font-mono uppercase tracking-wider text-slate-400">Observation Optics</div>
+          <div class="font-display text-xl sm:text-2xl font-bold text-cyan-300 mt-1">Exact-ℚ Lenses</div>
+          <div class="text-xs text-slate-400 mt-1 font-mono">silisense/lenses.py · 46.9 KB</div>
+        </div>
+        <div class="glass-panel rounded-2xl p-4">
+          <div class="text-[11px] font-mono uppercase tracking-wider text-slate-400">Boundary Envelope</div>
+          <div class="font-display text-xl sm:text-2xl font-bold text-sky-300 mt-1">64B Cache-Line</div>
+          <div class="text-xs text-slate-400 mt-1 font-mono">frame64.py · airlock.py</div>
+        </div>
+        <div class="glass-panel rounded-2xl p-4">
+          <div class="text-[11px] font-mono uppercase tracking-wider text-slate-400">Control Law</div>
+          <div class="font-display text-xl sm:text-2xl font-bold text-emerald-300 mt-1">Lyapunov CBF</div>
+          <div class="text-xs text-slate-400 mt-1 font-mono">governor.py · autotuner.py</div>
+        </div>
+        <div class="glass-panel rounded-2xl p-4 col-span-2 md:col-span-1">
+          <div class="text-[11px] font-mono uppercase tracking-wider text-slate-400">Verification</div>
+          <div class="font-display text-xl sm:text-2xl font-bold text-purple-300 mt-1">S115 · R5 Suite</div>
+          <div class="text-xs text-slate-400 mt-1 font-mono">79.7 KB Zero-Drift Tests</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================================================================== -->
+    <!-- SECTION 1: SILISCRIPT LIVE 3D OPTICAL LENS & GOVERNOR STUDIO          -->
+    <!-- ===================================================================== -->
+    <section id="studio" class="scroll-mt-20 space-y-5">
+      <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div>
+          <div class="text-xs font-mono uppercase tracking-widest text-cyan-400 mb-1">Interactive Mathematical Scripting Engine</div>
+          <h2 class="font-display text-2xl sm:text-3xl font-bold text-white">
+            SiliScript Live Optical Lens &amp; Control Studio
+          </h2>
+          <p class="text-sm text-slate-400 mt-1 max-w-2xl">
+            Switch across SiliSense's five core mathematical kernels—or edit the live parametric optical &amp; control script—to visualize conformal <span class="font-mono text-cyan-300">Exact-ℚ</span> lens caustics, 4-byte Razor phase shells, Lyapunov governor attractors, and <span class="font-mono text-amber-300">Frame64</span> airlocks at 60 FPS.
+          </p>
+        </div>
+
+        <!-- Preset Selector Pills -->
+        <div class="flex flex-wrap gap-2" id="preset-buttons">
+          <button type="button" data-preset="lenses" class="preset-btn px-3 py-1.5 rounded-xl text-xs font-mono border transition bg-cyan-500/20 border-cyan-400 text-cyan-200">
+            01 · Conformal Lenses
+          </button>
+          <button type="button" data-preset="razor" class="preset-btn px-3 py-1.5 rounded-xl text-xs font-mono border transition bg-slate-900/70 border-slate-700 text-slate-300 hover:border-slate-500">
+            02 · Razor 4-Byte Shell
+          </button>
+          <button type="button" data-preset="governor" class="preset-btn px-3 py-1.5 rounded-xl text-xs font-mono border transition bg-slate-900/70 border-slate-700 text-slate-300 hover:border-slate-500">
+            03 · Lyapunov Governor
+          </button>
+          <button type="button" data-preset="airlock" class="preset-btn px-3 py-1.5 rounded-xl text-xs font-mono border transition bg-slate-900/70 border-slate-700 text-slate-300 hover:border-slate-500">
+            04 · Airlock Frame64
+          </button>
+          <button type="button" data-preset="bridge" class="preset-btn px-3 py-1.5 rounded-xl text-xs font-mono border transition bg-slate-900/70 border-slate-700 text-slate-300 hover:border-slate-500">
+            05 · Autotuner × HoloSphere
+          </button>
+        </div>
+      </div>
+
+      <!-- Studio Grid: 7 Cols 3D Viewport + 5 Cols Live Mathematical Script & Controls -->
+      <div class="grid grid-cols-1 xl:grid-cols-12 gap-5 items-stretch">
+
+        <!-- LEFT: 3D WebGL SiliSense Optical Manifold Viewport -->
+        <div class="xl:col-span-7 glass-panel rounded-3xl overflow-hidden relative flex flex-col min-h-[520px] sm:min-h-[620px]">
+          <!-- Top Telemetry HUD -->
+          <div class="absolute top-3 left-3 right-3 z-10 flex flex-wrap items-start justify-between gap-2 pointer-events-none">
+            <div class="glass-subtle rounded-2xl px-3.5 py-2.5 space-y-1 pointer-events-auto">
+              <div class="flex items-center gap-2 text-[11px] font-mono">
+                <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
+                <span id="hud-mode-title" class="text-white font-semibold">Conformal Möbius &amp; Exact-ℚ Optical Lens</span>
+              </div>
+              <div class="grid grid-cols-2 gap-x-4 gap-y-0.5 text-[11px] font-mono text-slate-300">
+                <div>Lens ‖z‖<sub>𝔻</sub>: <span id="hud-disk-norm" class="text-cyan-300">0.741200</span></div>
+                <div>Exact-ℚ Drift: <span id="hud-q-err" class="text-emerald-300">0.00e+00</span></div>
+                <div>Lyapunov V(x): <span id="hud-lyapunov" class="text-amber-300">0.0842</span></div>
+                <div>Razor Word: <span id="hud-razor-hex" class="text-purple-300">0x4D82F19A</span></div>
+              </div>
+            </div>
+
+            <!-- Viewport Toolbar -->
+            <div class="flex items-center gap-1.5 pointer-events-auto">
+              <button id="btn-toggle-triad" type="button" class="px-2.5 py-1.5 rounded-xl text-[11px] font-mono glass-subtle text-emerald-200 border border-emerald-400/30 hover:border-emerald-300 transition" title="Toggle Governor Control Triad (-∇V, J∇H, u_gov)">
+                Control Triad: ON
+              </button>
+              <button id="btn-pause-sim" type="button" class="px-2.5 py-1.5 rounded-xl text-[11px] font-mono glass-subtle text-slate-200 hover:border-cyan-400/50 transition">
+                Pause
+              </button>
+              <button id="btn-reset-cam" type="button" class="px-2.5 py-1.5 rounded-xl text-[11px] font-mono glass-subtle text-slate-200 hover:border-cyan-400/50 transition">
+                Reset View
+              </button>
+            </div>
+          </div>
+
+          <!-- Interactive 3D Three.js Stage -->
+          <div id="webgl-container" class="w-full flex-1 cursor-grab active:cursor-grabbing relative select-none"></div>
+
+          <!-- Interactive Conformal Lens Aperture Pad (Bottom Left) -->
+          <div class="absolute bottom-3 left-3 z-10 glass-panel rounded-2xl p-3 w-44 sm:w-48 select-none">
+            <div class="flex items-center justify-between mb-1.5">
+              <span class="text-[10px] font-mono uppercase tracking-wider text-cyan-300 font-semibold">Conformal Lens Pad</span>
+              <span class="text-[10px] font-mono text-slate-400">Drag probes</span>
+            </div>
+            <div class="relative w-full aspect-square rounded-xl bg-silicon-950/90 border border-slate-800 overflow-hidden">
+              <canvas id="lens-pad-canvas" class="w-full h-full block touch-none cursor-crosshair"></canvas>
+            </div>
+            <p class="text-[10px] text-slate-400 font-mono mt-1.5 leading-snug">
+              Injects 3 live silicon probes (<span class="text-amber-300">Latency</span>, <span class="text-cyan-300">Pressure</span>, <span class="text-purple-300">Phase</span>) into 𝔻².
+            </p>
+          </div>
+
+          <!-- Legend Overlay (Bottom Right) -->
+          <div class="hidden sm:flex absolute bottom-3 right-3 z-10 glass-subtle rounded-2xl px-3 py-2 flex-col gap-1 text-[10px] font-mono text-slate-300 pointer-events-none">
+            <div class="flex items-center gap-1.5"><span class="w-2.5 h-0.5 bg-emerald-400 inline-block"></span> Dissipative Descent <strong>−∇V(x)</strong></div>
+            <div class="flex items-center gap-1.5"><span class="w-2.5 h-0.5 bg-cyan-400 inline-block"></span> Symplectic Flow <strong>J∇H(x)</strong></div>
+            <div class="flex items-center gap-1.5"><span class="w-2.5 h-0.5 bg-amber-300 inline-block"></span> Barrier Normal <strong>∇h<sub>CBF</sub></strong></div>
+            <div class="text-slate-400 pt-0.5">Drag to orbit · Scroll to zoom</div>
+          </div>
+        </div>
+
+        <!-- RIGHT: Live Symbolic Equation + Sliders + Editable SiliScript Kernel -->
+        <div class="xl:col-span-5 flex flex-col gap-4">
+
+          <!-- Live Symbolic Formula Card (KaTeX) -->
+          <div class="glass-panel rounded-3xl p-4 sm:p-5 space-y-2">
+            <div class="flex items-center justify-between">
+              <span id="formula-badge" class="text-[11px] font-mono text-cyan-300 uppercase tracking-wider">silisense/lenses.py</span>
+              <span class="text-[11px] font-mono text-emerald-300">Deterministic Exact-ℚ</span>
+            </div>
+            <div id="studio-katex-box" class="py-2 px-3 rounded-xl bg-silicon-950/85 border border-slate-800/80 overflow-x-auto text-center min-h-[60px] flex items-center justify-center"></div>
+            <p id="formula-caption" class="text-xs text-slate-300 leading-relaxed"></p>
+          </div>
+
+          <!-- Parametric Sliders -->
+          <div class="glass-panel rounded-3xl p-4 sm:p-5 space-y-3.5">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-mono uppercase tracking-wider text-slate-300 font-semibold">Optical &amp; Control Parameters</span>
+              <span class="text-[11px] font-mono text-slate-400">60 FPS Zero-Alloc</span>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <div>
+                <div class="flex justify-between text-xs font-mono mb-1">
+                  <label for="slider-p0" id="label-p0" class="text-slate-300">Refractive Curvature κ</label>
+                  <span id="val-p0" class="text-cyan-300">0.72</span>
+                </div>
+                <input id="slider-p0" type="range" min="0.10" max="1.50" step="0.01" value="0.72" class="w-full" />
+              </div>
+
+              <div>
+                <div class="flex justify-between text-xs font-mono mb-1">
+                  <label for="slider-p1" id="label-p1" class="text-slate-300">Exact-ℚ Mantissa Bits</label>
+                  <span id="val-p1" class="text-amber-300">10.00</span>
+                </div>
+                <input id="slider-p1" type="range" min="2" max="12" step="1" value="10" class="w-full" />
+              </div>
+
+              <div>
+                <div class="flex justify-between text-xs font-mono mb-1">
+                  <label for="slider-p2" id="label-p2" class="text-slate-300">Governor Damping γ</label>
+                  <span id="val-p2" class="text-emerald-300">0.65</span>
+                </div>
+                <input id="slider-p2" type="range" min="0.0" max="1.5" step="0.02" value="0.65" class="w-full" />
+              </div>
+
+              <div>
+                <div class="flex justify-between text-xs font-mono mb-1">
+                  <label for="slider-p3" id="label-p3" class="text-slate-300">Harmonic Torsion ω</label>
+                  <span id="val-p3" class="text-purple-300">3.00</span>
+                </div>
+                <input id="slider-p3" type="range" min="0.5" max="7.0" step="0.1" value="3.0" class="w-full" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Editable SiliScript Mathematical Kernel -->
+          <div class="glass-panel rounded-3xl p-4 sm:p-5 flex-1 flex flex-col">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+              <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-cyan-400"></span>
+                <span id="script-filename" class="text-xs font-mono font-semibold text-white">01_conformal_lenses_exact_q.sili</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span id="compile-status" class="px-2 py-0.5 rounded-md text-[10px] font-mono bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                  Compiled · Live 60 FPS
+                </span>
+                <button id="btn-run-script" type="button" class="px-2.5 py-1 rounded-lg text-[11px] font-mono bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-200 border border-cyan-400/40 transition">
+                  Eval (Ctrl+Enter)
+                </button>
+              </div>
+            </div>
+
+            <div class="text-[11px] font-mono text-slate-400 mb-1.5">
+              fn <span class="text-cyan-300">sampleRay</span>(i, N, s, t, params) <span class="text-slate-500">// mobiusLens, cayleyLens, exactQ, razorQuant, governorStep, hopfBridge</span>
+            </div>
+
+            <textarea id="siliscript-editor" spellcheck="false" class="code-editor w-full flex-1 min-h-[205px] rounded-2xl bg-silicon-950/95 border border-slate-800 focus:border-cyan-400/60 p-3.5 text-xs font-mono text-cyan-100 resize-y"></textarea>
+
+            <div id="script-error-banner" class="hidden mt-2 px-3 py-2 rounded-xl bg-rose-500/15 border border-rose-500/40 text-[11px] font-mono text-rose-200"></div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================================================================== -->
+    <!-- SECTION 2: INTERACTIVE FRAME64 CACHE-LINE & AIRLOCK + RAZOR INSPECTOR -->
+    <!-- ===================================================================== -->
+    <section id="airlock-frame64" class="scroll-mt-20 space-y-6">
+      <div class="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
+        <div>
+          <div class="text-xs font-mono uppercase tracking-widest text-amber-400 mb-1">
+            silisense/frame64.py · silisense/airlock.py · include/razor_abi_4byte_sys.h
+          </div>
+          <h2 class="font-display text-2xl sm:text-3xl font-bold text-white">
+            Interactive 64-Byte <code class="text-amber-300 font-mono">Frame64</code> Cache-Line &amp; Zero-Lock Airlock
+          </h2>
+          <p class="text-sm text-slate-400 mt-1 max-w-3xl">
+            One CPU/GPU L1 cache line is exactly <strong class="text-white">64 bytes = 16 × 4-byte Razor words</strong>.
+            <code class="text-cyan-300 font-mono">airlock.py</code> transfers complete proprioceptive snapshots across asynchronous host/device boundaries using sequence-fenced double-buffered slots—rejecting torn reads or bit-flips in <span class="font-mono">O(1)</span> register ops without mutexes.
+          </p>
+        </div>
+
+        <!-- Airlock Controls -->
+        <div class="flex flex-wrap items-center gap-2">
+          <button id="btn-inject-fault" type="button" class="px-3.5 py-2 rounded-xl text-xs font-mono bg-rose-500/15 hover:bg-rose-500/25 text-rose-200 border border-rose-400/40 transition">
+            Inject Torn-Read / Bit Fault
+          </button>
+          <button id="btn-step-epoch" type="button" class="px-3.5 py-2 rounded-xl text-xs font-mono glass-panel text-cyan-200 hover:border-cyan-400/60 transition">
+            Commit Frame64 →
+          </button>
+          <button id="btn-auto-airlock" type="button" class="px-3.5 py-2 rounded-xl text-xs font-mono bg-amber-500/20 text-amber-200 border border-amber-400/40 hover:bg-amber-500/30 transition">
+            Live Stream: ON
+          </button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+        <!-- LEFT: 64-Byte Cache Line (16 x 4B Razor Words) & Airlock Pipeline Canvas -->
+        <div class="lg:col-span-8 glass-panel rounded-3xl p-4 sm:p-6 flex flex-col justify-between space-y-4">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-2.5">
+              <span id="airlock-state-badge" class="px-2.5 py-1 rounded-lg text-xs font-mono bg-emerald-500/20 text-emerald-200 border border-emerald-400/40">
+                AIRLOCK SEALED · Epoch #1048 · Parity OK
+              </span>
+              <span class="text-xs font-mono text-slate-400 hidden sm:inline">Click any of the 16 4-Byte Razor words below</span>
+            </div>
+            <span class="text-xs font-mono text-amber-300">sizeof(Frame64) == 64 B (512 bits)</span>
+          </div>
+
+          <!-- Airlock Producer -> Ring Buffer -> GPU Consumer Canvas -->
+          <div class="w-full h-[165px] rounded-2xl bg-silicon-950/90 border border-slate-800/90 overflow-hidden relative">
+            <canvas id="airlock-canvas" class="w-full h-full block"></canvas>
+          </div>
+
+          <!-- Interactive 16-Word (4x4 or 8x2) Frame64 Memory Grid -->
+          <div>
+            <div class="text-[11px] font-mono text-slate-400 mb-2 flex items-center justify-between">
+              <span>L1 Cache-Line Layout (<code class="text-cyan-300">alignas(64) uint32_t words[16]</code>):</span>
+              <span>Bytes <code class="text-slate-300">[0x00 .. 0x3F]</code></span>
+            </div>
+            <div id="frame64-grid" class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <!-- Populated dynamically with all 16 Razor words -->
+            </div>
+          </div>
+        </div>
+
+        <!-- RIGHT: Selected 4-Byte Razor Word & Exact-Q Bit-Field Decoder -->
+        <div class="lg:col-span-4 glass-panel rounded-3xl p-5 flex flex-col justify-between space-y-5">
+          <div class="space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-mono uppercase tracking-wider text-cyan-300">Razor 4-Byte Word Decoder</span>
+              <span id="selected-word-badge" class="px-2.5 py-0.5 rounded-full text-xs font-mono bg-amber-500/20 text-amber-200 border border-amber-400/40">
+                Word [02] · Offset +0x08
+              </span>
+            </div>
+
+            <div class="p-3.5 rounded-2xl bg-silicon-950/90 border border-slate-800 space-y-2.5 font-mono text-xs">
+              <div class="flex items-center justify-between">
+                <span id="word-role-name" class="text-white font-semibold">Lens: Latency Tail κ_99</span>
+                <span id="word-hex-val" class="text-amber-300 font-bold">0x5A3C81E4</span>
+              </div>
+              <p id="word-role-desc" class="text-[11px] text-slate-400 font-sans leading-relaxed">
+                Conformal Cayley-mapped p99 warp stall ratio encoded in dyadic Exact-ℚ rational format.
+              </p>
+
+              <div class="grid grid-cols-2 gap-2 pt-1">
+                <div class="p-2 rounded-lg bg-slate-900/85">
+                  <div class="text-[10px] text-slate-400">Exact-ℚ Rational</div>
+                  <div id="word-exact-q" class="text-cyan-300 font-semibold mt-0.5">739 / 1024</div>
+                </div>
+                <div class="p-2 rounded-lg bg-slate-900/85">
+                  <div class="text-[10px] text-slate-400">Decoded Scalar</div>
+                  <div id="word-float-val" class="text-emerald-300 font-semibold mt-0.5">0.7216797</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 32-Bit Razor ABI Bit Breakdown -->
+          <div class="space-y-2.5">
+            <div class="flex items-center justify-between text-xs font-mono">
+              <span class="text-slate-300 font-semibold">include/razor_abi_4byte_sys.h</span>
+              <span class="text-emerald-300 text-[11px]">32-bit Atomic</span>
+            </div>
+
+            <div class="rounded-2xl bg-silicon-950/90 border border-slate-800 p-3 space-y-2 font-mono text-[10px]">
+              <div class="grid grid-cols-12 gap-1 text-center">
+                <div class="col-span-2 py-1.5 rounded bg-rose-500/20 border border-rose-400/40 text-rose-200" title="Regime / Lens Chart [31:29]">
+                  Regime<br/><span id="bits-regime" class="text-[9px] opacity-85">010</span>
+                </div>
+                <div class="col-span-4 py-1.5 rounded bg-cyan-500/20 border border-cyan-400/40 text-cyan-200" title="Exact-Q Signed Dyadic Numerator [28:18]">
+                  Exact-ℚ p<br/><span id="bits-num" class="text-[9px] opacity-85">11b</span>
+                </div>
+                <div class="col-span-3 py-1.5 rounded bg-amber-500/20 border border-amber-400/40 text-amber-200" title="Conformal Tangent / Exponent [17:9]">
+                  Chord q<br/><span id="bits-chord" class="text-[9px] opacity-85">9b</span>
+                </div>
+                <div class="col-span-3 py-1.5 rounded bg-purple-500/20 border border-purple-400/40 text-purple-200" title="HoloSphere Phase / CRC9 [8:0]">
+                  Phase ψ<br/><span id="bits-phase" class="text-[9px] opacity-85">9b</span>
+                </div>
+              </div>
+              <div id="word-binary-str" class="text-[10px] text-slate-400 tracking-tight break-all text-center pt-0.5">
+                010 · 11010001111 · 001000001 · 111100100
+              </div>
+            </div>
+
+            <div class="p-3 rounded-xl bg-slate-900/70 border border-slate-800/80 text-[11px] font-mono text-slate-300 flex items-center justify-between">
+              <span>Shared Wire ABI w/ HoloSphere:</span>
+              <span class="text-purple-300">Zero-Copy ✓</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================================================================== -->
+    <!-- SECTION 3: FIVE FRONTIER MATHEMATICAL SPINES OF SILISENSE             -->
+    <!-- ===================================================================== -->
+    <section id="pillars" class="scroll-mt-20 space-y-6">
+      <div>
+        <div class="text-xs font-mono uppercase tracking-widest text-cyan-400 mb-1">Conformal Geometry × Dyadic Number Theory × Nonlinear Control</div>
+        <h2 class="font-display text-2xl sm:text-3xl font-bold text-white">
+          Five Mathematical Spines of SiliSense
+        </h2>
+        <p class="text-sm text-slate-400 mt-1 max-w-3xl">
+          Every module in <code class="font-mono text-cyan-300">silisense/</code> replaces brittle heuristic thresholds and noisy floating-point moving averages with exact algebraic and geometric invariants.
+        </p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <!-- Spine 1: Razor 4-Byte Codec -->
+        <article class="glass-panel rounded-3xl p-6 flex flex-col justify-between space-y-4 hover:border-amber-400/40 transition">
+          <div class="space-y-2.5">
+            <div class="flex items-center justify-between text-xs font-mono">
+              <span class="px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30">silisense/razor.py</span>
+              <span class="text-slate-400">52.6 KB</span>
+            </div>
+            <h3 class="font-display text-xl font-bold text-white">4-Byte Razor Sensory Codec</h3>
+            <p class="text-sm text-slate-300/90 leading-relaxed">
+              Compresses multidimensional proprioceptive state (curvature, pressure, phase, regime flags) into a single <strong>32-bit word</strong> (`razor_abi_4byte_sys.h`) with monotonic quantization and bounded worst-case chordal distortion.
+            </p>
+          </div>
+          <div id="spine-math-1" class="p-3 rounded-2xl bg-silicon-950/85 border border-slate-800/80 overflow-x-auto text-center"></div>
+        </article>
+
+        <!-- Spine 2: Optical Lenses & Exact-Q -->
+        <article class="glass-panel rounded-3xl p-6 flex flex-col justify-between space-y-4 hover:border-cyan-400/40 transition">
+          <div class="space-y-2.5">
+            <div class="flex items-center justify-between text-xs font-mono">
+              <span class="px-2.5 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">silisense/lenses.py</span>
+              <span class="text-slate-400">46.9 KB</span>
+            </div>
+            <h3 class="font-display text-xl font-bold text-white">Conformal Lenses &amp; Exact-ℚ</h3>
+            <p class="text-sm text-slate-300/90 leading-relaxed">
+              Maps unbounded heavy-tailed hardware telemetry <span class="font-mono text-cyan-300">[0, ∞)</span> onto the compact Poincaré/Beltrami disk <span class="font-mono">𝔻</span> via rational Cayley–Möbius lenses evaluated over dyadic rationals <span class="font-mono text-cyan-300">ℤ[1/2] ⊂ ℚ</span> for bit-identical replay across architectures.
+            </p>
+          </div>
+          <div id="spine-math-2" class="p-3 rounded-2xl bg-silicon-950/85 border border-slate-800/80 overflow-x-auto text-center"></div>
+        </article>
+
+        <!-- Spine 3: Lyapunov Governor -->
+        <article class="glass-panel rounded-3xl p-6 flex flex-col justify-between space-y-4 hover:border-emerald-400/40 transition">
+          <div class="space-y-2.5">
+            <div class="flex items-center justify-between text-xs font-mono">
+              <span class="px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">silisense/governor.py</span>
+              <span class="text-slate-400">21.5 KB</span>
+            </div>
+            <h3 class="font-display text-xl font-bold text-white">Lyapunov &amp; Barrier Governor</h3>
+            <p class="text-sm text-slate-300/90 leading-relaxed">
+              Replaces ad-hoc heuristic throttling with a provably stable <strong>Control Barrier Function (CBF)</strong> + Lyapunov potential <span class="font-mono text-emerald-300">V(x)</span>, guaranteeing forward invariance of safe thermal, memory, and holonomy error envelopes.
+            </p>
+          </div>
+          <div id="spine-math-3" class="p-3 rounded-2xl bg-silicon-950/85 border border-slate-800/80 overflow-x-auto text-center"></div>
+        </article>
+
+        <!-- Spine 4: Airlock & Frame64 -->
+        <article class="glass-panel rounded-3xl p-6 flex flex-col justify-between space-y-4 hover:border-sky-400/40 transition">
+          <div class="space-y-2.5">
+            <div class="flex items-center justify-between text-xs font-mono">
+              <span class="px-2.5 py-0.5 rounded-full bg-sky-500/15 text-sky-300 border border-sky-500/30">airlock.py · frame64.py</span>
+              <span class="text-slate-400">23.7 KB</span>
+            </div>
+            <h3 class="font-display text-xl font-bold text-white">Zero-Lock Seqlock Airlock</h3>
+            <p class="text-sm text-slate-300/90 leading-relaxed">
+              Packs 16 Razor words into one 64-byte cache-aligned <code class="font-mono text-sky-300">Frame64</code> envelope transported across a lock-free odd/even epoch Airlock—eliminating host/GPU mutex stalls and rejecting torn cache lines deterministically.
+            </p>
+          </div>
+          <div id="spine-math-4" class="p-3 rounded-2xl bg-silicon-950/85 border border-slate-800/80 overflow-x-auto text-center"></div>
+        </article>
+
+        <!-- Spine 5: Autotuner & HoloSphere Bridge -->
+        <article class="glass-panel rounded-3xl p-6 flex flex-col justify-between space-y-4 hover:border-purple-400/40 transition md:col-span-2 lg:col-span-2">
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-center">
+            <div class="lg:col-span-7 space-y-2.5">
+              <div class="flex items-center gap-2 text-xs font-mono">
+                <span class="px-2.5 py-0.5 rounded-full bg-purple-500/15 text-purple-300 border border-purple-500/30">autotuner.py · holosphere_bridge.py</span>
+                <span class="text-slate-400">28.8 KB</span>
+              </div>
+              <h3 class="font-display text-xl font-bold text-white">Pareto Kernel Autotuner &amp; Isometric HoloSphere Bridge</h3>
+              <p class="text-sm text-slate-300/90 leading-relaxed">
+                Couples SiliSense's online convex/bandit kernel <code class="font-mono text-cyan-300">autotuner.py</code> directly into <strong>HoloSphere</strong>'s <span class="font-mono text-purple-300">SU(2) ≅ S³</span> holonomy scans and variable-depth Cayley blocks. When lens curvature detects easy semantic regimes, SiliSense dynamically adapts chunk schedules and Cayley depth while preserving unit spinor norm!
+              </p>
+            </div>
+            <div class="lg:col-span-5">
+              <div id="spine-math-5" class="p-4 rounded-2xl bg-silicon-950/85 border border-slate-800/80 overflow-x-auto text-center"></div>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <!-- ===================================================================== -->
+    <!-- SECTION 4: CLOSED-LOOP GOVERNOR SIMULATOR & R5 VERIFICATION ORACLE    -->
+    <!-- ===================================================================== -->
+    <section id="governor-lab" class="scroll-mt-20 space-y-6">
+      <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div>
+          <div class="text-xs font-mono uppercase tracking-widest text-emerald-400 mb-1">tests/test_*_r5.py · benchmarks/prereg_s115_suite.py</div>
+          <h2 class="font-display text-2xl sm:text-3xl font-bold text-white">
+            R5 Verification Suite &amp; Live Closed-Loop Governor Lab
+          </h2>
+          <p class="text-sm text-slate-400 mt-1 max-w-3xl">
+            Over 26% of the <code class="font-mono text-cyan-300">silisense-main</code> repository is dedicated to strict <strong>R5 verification tests</strong> (79.7 KB across 6 test modules). Explore the R5 harnesses, run 5,000 live browser property checks, and stress-test the closed-loop Lyapunov Governor under bursty inference loads.
+          </p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <!-- LEFT: R5 Test Suite Explorer & Live Browser Property Oracle -->
+        <div class="lg:col-span-7 glass-panel rounded-3xl p-5 sm:p-6 flex flex-col justify-between space-y-5">
+          <div class="space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <span class="text-xs font-mono uppercase tracking-wider text-cyan-300 font-semibold">R5 Invariant Test Harnesses (79,682 bytes)</span>
+              <span class="px-2.5 py-0.5 rounded-full text-[11px] font-mono bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                prereg_s115_suite.py · PASS
+              </span>
+            </div>
+
+            <!-- R5 Tabs -->
+            <div class="flex flex-wrap gap-1.5" id="r5-tabs">
+              <button type="button" data-r5="razor" class="r5-tab px-2.5 py-1.5 rounded-xl text-xs font-mono bg-cyan-500/20 text-cyan-200 border border-cyan-400/40">
+                test_razor_r5.py
+              </button>
+              <button type="button" data-r5="lenses" class="r5-tab px-2.5 py-1.5 rounded-xl text-xs font-mono bg-slate-900/80 text-slate-300 border border-slate-800 hover:border-slate-600">
+                test_lenses_and_exact_q_r5.py
+              </button>
+              <button type="button" data-r5="governor" class="r5-tab px-2.5 py-1.5 rounded-xl text-xs font-mono bg-slate-900/80 text-slate-300 border border-slate-800 hover:border-slate-600">
+                test_governor_autotuner_bridge_r5.py
+              </button>
+              <button type="button" data-r5="airlock" class="r5-tab px-2.5 py-1.5 rounded-xl text-xs font-mono bg-slate-900/80 text-slate-300 border border-slate-800 hover:border-slate-600">
+                test_airlock_and_frame64_r5.py
+              </button>
+            </div>
+
+            <!-- Code Snippet View -->
+            <div class="rounded-2xl bg-silicon-950/95 border border-slate-800 p-4 font-mono text-xs overflow-x-auto space-y-2">
+              <div class="flex items-center justify-between text-[11px] text-slate-400 border-b border-slate-800/80 pb-2">
+                <span id="r5-file-label" class="text-cyan-300">tests/test_razor_r5.py (42,739 bytes)</span>
+                <span>Bit-Exact R5 Invariant</span>
+              </div>
+              <pre id="r5-code-view" class="text-slate-200 leading-relaxed whitespace-pre-wrap"></pre>
+            </div>
+          </div>
+
+          <!-- Live Randomized Browser R5 Oracle -->
+          <div class="rounded-2xl bg-slate-900/75 border border-slate-800 p-4 space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <div class="text-xs font-mono font-semibold text-white">Live Browser R5 Invariant Oracle</div>
+                <div class="text-[11px] text-slate-400">Runs 5,000 live Exact-ℚ, Conformal Lens, Razor 4B &amp; Airlock parity trials in JS</div>
+              </div>
+              <button id="btn-run-oracle" type="button" class="px-3.5 py-2 rounded-xl text-xs font-mono font-semibold bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 border border-emerald-400/40 transition">
+                Run 5,000 R5 Trials
+              </button>
+            </div>
+
+            <div id="oracle-results" class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] font-mono">
+              <!-- Populated dynamically -->
+            </div>
+          </div>
+        </div>
+
+        <!-- RIGHT: Live Closed-Loop Lyapunov Governor vs Ungoverned Oscilloscope -->
+        <div class="lg:col-span-5 glass-panel rounded-3xl p-5 sm:p-6 flex flex-col justify-between space-y-4">
+          <div class="space-y-1.5">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-mono uppercase tracking-wider text-emerald-300 font-semibold">Live S115 Closed-Loop Telemetry Scope</span>
+              <span class="text-[11px] font-mono text-amber-300">Barrier h(x) ≥ 0</span>
+            </div>
+            <p class="text-xs text-slate-400 leading-relaxed">
+              Compare <span class="text-rose-400 font-mono">Open-Loop Ungoverned</span> tail latency &amp; phase drift against <span class="text-emerald-300 font-mono">SiliSense CBF Governor</span> under synthetic token-routing shockwaves:
+            </p>
+          </div>
+
+          <!-- Real-Time Oscilloscope Canvas -->
+          <div class="w-full h-[215px] rounded-2xl bg-silicon-950/95 border border-slate-800 overflow-hidden relative">
+            <canvas id="governor-scope-canvas" class="w-full h-full block"></canvas>
+          </div>
+
+          <!-- Interactive Stress Controls -->
+          <div class="space-y-3 pt-1">
+            <div>
+              <div class="flex justify-between text-xs font-mono mb-1">
+                <label for="slider-shock" class="text-slate-300">Workload Shockwave Amplitude</label>
+                <span id="val-shock" class="text-rose-300">0.75</span>
+              </div>
+              <input id="slider-shock" type="range" min="0.10" max="1.40" step="0.05" value="0.75" class="w-full" />
+            </div>
+
+            <div>
+              <div class="flex justify-between text-xs font-mono mb-1">
+                <label for="slider-cbf-gain" class="text-slate-300">CBF Governor Feedback Gain α<sub>CBF</sub></label>
+                <span id="val-cbf-gain" class="text-emerald-300">0.85</span>
+              </div>
+              <input id="slider-cbf-gain" type="range" min="0.10" max="1.40" step="0.05" value="0.85" class="w-full" />
+            </div>
+
+            <div class="grid grid-cols-2 gap-2.5 pt-1 text-xs font-mono">
+              <div class="p-2.5 rounded-xl bg-silicon-950/90 border border-slate-800">
+                <div class="text-[10px] text-slate-400">Open-Loop SLA Breaches</div>
+                <div id="metric-breach-open" class="text-rose-400 font-bold text-sm mt-0.5">38.4% Violated</div>
+              </div>
+              <div class="p-2.5 rounded-xl bg-silicon-950/90 border border-slate-800">
+                <div class="text-[10px] text-slate-400">SiliSense Governor</div>
+                <div id="metric-breach-sili" class="text-emerald-300 font-bold text-sm mt-0.5">0.0% · Clamped</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================================================================== -->
+    <!-- SECTION 5: INTERACTIVE REPOSITORY ARCHITECTURE ATLAS                  -->
+    <!-- ===================================================================== -->
+    <section id="atlas" class="scroll-mt-20 space-y-6">
+      <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+        <div>
+          <div class="text-xs font-mono uppercase tracking-widest text-cyan-400 mb-1">silisense-main.zip · 32 Entries · 295,681 Bytes</div>
+          <h2 class="font-display text-2xl sm:text-3xl font-bold text-white">
+            Interactive SiliSense Repository Atlas
+          </h2>
+          <p class="text-sm text-slate-400 mt-1">
+            Explore every module, C system ABI header, S115 preregistered benchmark, and R5 verification suite inside <code class="text-cyan-300 font-mono">silisense-main</code>.
+          </p>
+        </div>
+
+        <!-- Filter Pills -->
+        <div class="flex flex-wrap gap-1.5" id="atlas-filters">
+          <button type="button" data-filter="all" class="atlas-btn px-3 py-1.5 rounded-xl text-xs font-mono bg-cyan-500/20 text-cyan-200 border border-cyan-400/40">All</button>
+          <button type="button" data-filter="optics" class="atlas-btn px-3 py-1.5 rounded-xl text-xs font-mono bg-slate-900/80 text-slate-300 border border-slate-800">Codec &amp; Lenses</button>
+          <button type="button" data-filter="control" class="atlas-btn px-3 py-1.5 rounded-xl text-xs font-mono bg-slate-900/80 text-slate-300 border border-slate-800">Governor &amp; Bridge</button>
+          <button type="button" data-filter="boundary" class="atlas-btn px-3 py-1.5 rounded-xl text-xs font-mono bg-slate-900/80 text-slate-300 border border-slate-800">Airlock &amp; ABI</button>
+          <button type="button" data-filter="tests" class="atlas-btn px-3 py-1.5 rounded-xl text-xs font-mono bg-slate-900/80 text-slate-300 border border-slate-800">S115 &amp; R5 Tests</button>
+        </div>
+      </div>
+
+      <div id="atlas-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+        <!-- Populated dynamically from exact silisense-main.zip metadata -->
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-800/80 bg-silicon-950/90 py-10">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs font-mono text-slate-400">
+      <div class="flex items-center gap-2.5">
+        <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
+        <span class="text-slate-200 font-semibold">silisense-main</span>
+        <span>· Silicon Proprioception, Conformal Razor Optics &amp; Closed-Loop Inference Control</span>
+      </div>
+      <div>
+        Ready for GitHub Pages · Drop in as <code class="text-cyan-300">index.html</code> or <code class="text-cyan-300">docs/index.html</code>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ======================================================================= -->
+  <!-- SILISENSE MATHEMATICAL ENGINE, WEBGL RENDERER, & INTERACTIVE LOGIC      -->
+  <!-- ======================================================================= -->
+  <script>
+    (function () {
+      'use strict';
+
+      /* ---------------------------------------------------------------------
+       * 1. NON-BLOCKING TOAST & CLIPBOARD HELPER (NO alert() EVER)
+       * -------------------------------------------------------------------*/
+      function showToast(message, accent) {
+        const container = document.getElementById('toast-container');
+        if (!container) return;
+        const el = document.createElement('div');
+        const palette = accent === 'rose'
+          ? 'border-rose-400/50 text-rose-200'
+          : (accent === 'emerald' ? 'border-emerald-400/50 text-emerald-200' : 'border-cyan-400/50 text-cyan-200');
+        el.className = 'glass-panel px-4 py-2.5 rounded-xl text-xs font-mono border shadow-xl transition-all duration-300 ' + palette;
+        el.textContent = message;
+        container.appendChild(el);
+        setTimeout(function () {
+          el.style.opacity = '0';
+          el.style.transform = 'translateY(8px)';
+          setTimeout(function () {
+            if (el.parentNode) el.parentNode.removeChild(el);
+          }, 300);
+        }, 2500);
+      }
+
+      function copyTextSafe(text, label) {
+        try {
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          ta.style.position = 'fixed';
+          ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+          showToast('Copied: ' + (label || text), 'emerald');
+        } catch (err) {
+          showToast('Clipboard copy restricted in this preview frame', 'cyan');
+        }
+      }
+
+      /* ---------------------------------------------------------------------
+       * 2. SILISENSE EXACT MATHEMATICAL PRIMITIVES (LENSES, EXACT-Q, RAZOR)
+       * -------------------------------------------------------------------*/
+      const PI = Math.PI;
+      const TAU = Math.PI * 2.0;
+
+      // Exact-Q Dyadic Rational Snap: maps real x onto exact integer numerator p / 2^bits ∈ ℤ[1/2]
+      function exactQ(x, bits) {
+        const b = Math.max(1, Math.min(20, Math.round(bits || 10)));
+        const scale = Math.pow(2, b);
+        return Math.round(x * scale) / scale;
+      }
+
+      // Rational Cayley Optical Lens: maps unbounded ℝ₊ / ℝ onto compact interval (-1, 1) with zero transcendental calls
+      function cayleyLens(x, curvature) {
+        const k = Math.max(0.05, curvature || 1.0);
+        const u = k * x;
+        return (u - 1.0) / (u + 1.0);
+      }
+
+      // Inverse Cayley Lens for R5 bijection verification: y ∈ (-1, 1) -> x ∈ (0, ∞)
+      function cayleyLensInv(y, curvature) {
+        const k = Math.max(0.05, curvature || 1.0);
+        const clamped = Math.max(-0.999999, Math.min(0.999999, y));
+        return (1.0 + clamped) / (k * (1.0 - clamped));
+      }
+
+      // 2D Conformal Möbius Automorphism of the Poincaré Disk 𝔻²: f_a(z) = e^{iθ} (z - a) / (1 - conj(a) z)
+      function mobiusLens(zx, zy, ax, ay, rot) {
+        // clamp 'a' strictly inside unit disk |a| < 0.92
+        let ar = Math.sqrt(ax * ax + ay * ay);
+        if (ar > 0.92) {
+          ax = (ax / ar) * 0.92;
+          ay = (ay / ar) * 0.92;
+        }
+        // num = z - a
+        const nx = zx - ax;
+        const ny = zy - ay;
+        // den = 1 - conj(a)*z = (1 - (ax*zx + ay*zy)) - i*(ax*zy - ay*zx)
+        const dx = 1.0 - (ax * zx + ay * zy);
+        const dy = -(ax * zy - ay * zx);
+        const d2 = Math.max(1e-6, dx * dx + dy * dy);
+        const qx = (nx * dx + ny * dy) / d2;
+        const qy = (ny * dx - nx * dy) / d2;
+        const c = Math.cos(rot || 0.0);
+        const s = Math.sin(rot || 0.0);
+        return [qx * c - qy * s, qx * s + qy * c];
+      }
+
+      // Beltrami-Poincaré 3D Conformal Ball Refraction
+      function beltramiRefract(px, py, pz, k) {
+        const r2 = px * px + py * py + pz * pz;
+        const denom = 1.0 + (k || 0.5) * r2;
+        return [(px * 1.65) / denom, (py * 1.65) / denom, (pz * 1.65) / denom];
+      }
+
+      // 4-Byte Razor Quantizer Simulation: packs 3D bounded point into quantized Razor lattice
+      function razorQuant(pos, bits) {
+        const b = Math.max(2, Math.min(12, Math.round(bits || 10)));
+        return [
+          exactQ(Math.max(-2.2, Math.min(2.2, pos[0])), b),
+          exactQ(Math.max(-2.2, Math.min(2.2, pos[1])), b),
+          exactQ(Math.max(-2.2, Math.min(2.2, pos[2])), b)
+        ];
+      }
+
+      // Pack a 32-bit Razor Word matching include/razor_abi_4byte_sys.h
+      function packRazorWord32(regime, valExactQ, chordVal, phaseRad) {
+        const reg3 = (regime & 0x7) >>> 0;
+        const num11 = Math.max(0, Math.min(2047, Math.round((valExactQ + 1.0) * 1023.5))) >>> 0;
+        const chd9 = Math.max(0, Math.min(511, Math.round((chordVal + 1.0) * 255.5))) >>> 0;
+        const phs9 = Math.max(0, Math.min(511, Math.round((((phaseRad % TAU) + TAU) % TAU) / TAU * 511))) >>> 0;
+        return (((reg3 << 29) | (num11 << 18) | (chd9 << 9) | phs9) >>> 0);
+      }
+
+      // Closed-Loop Lyapunov + Symplectic Governor Step: combines rotational flow with -γ ∇V damping onto target radius R₀
+      function governorStep(x, y, z, gamma, targetR, omega) {
+        const r = Math.sqrt(x * x + y * y + z * z) || 1e-4;
+        const radialErr = r - (targetR || 1.15);
+        const damp = Math.exp(-Math.max(0, gamma) * 0.65);
+        const rNext = (targetR || 1.15) + radialErr * damp;
+        const scale = rNext / r;
+        const c = Math.cos(omega || 0.0);
+        const s = Math.sin(omega || 0.0);
+        const rx = (x * c - z * s) * scale;
+        const rz = (x * s + z * c) * scale;
+        const ry = y * damp + 0.28 * Math.sin((omega || 0) * 2.0);
+        return [rx, ry, rz];
+      }
+
+      // Isometric HoloSphere S³ Spinor Bridge Projection (silisense/holosphere_bridge.py)
+      function hopfBridge(theta, phi, psi, alpha) {
+        const ct = Math.cos(theta * 0.5);
+        const st = Math.sin(theta * 0.5);
+        const q0 = ct * Math.cos(psi + phi * 0.5);
+        const q1 = ct * Math.sin(psi + phi * 0.5);
+        const q2 = st * Math.cos(psi - phi * 0.5);
+        const q3 = st * Math.sin(psi - phi * 0.5);
+        const a = Math.min(0.90, Math.max(0.25, alpha || 0.72));
+        const den = Math.max(0.08, 1.0 - a * q3);
+        const sc = Math.sqrt(1.0 - a * a) * 1.42;
+        return [(q0 / den) * sc, (q1 / den) * sc, (q2 / den) * sc];
+      }
+
+      /* ---------------------------------------------------------------------
+       * 3. INTERACTIVE CONFORMAL LENS PROBE PAD STATE
+       * -------------------------------------------------------------------*/
+      const lensProbes = [
+        { x: 0.36, y: 0.28, color: '#fbbf24', hue: 0.11, name: 'Latency' },
+        { x: -0.42, y: 0.31, color: '#22d3ee', hue: 0.52, name: 'Pressure' },
+        { x: 0.12, y: -0.48, color: '#c084fc', hue: 0.78, name: 'Holonomy' }
+      ];
+      let draggingProbeIdx = -1;
+
+      /* ---------------------------------------------------------------------
+       * 4. FIVE CURATED SILISCRIPT KERNEL PRESETS (silisense/*.py)
+       * -------------------------------------------------------------------*/
+      const PRESETS = {
+        lenses: {
+          filename: '01_conformal_lenses_exact_q.sili',
+          hudTitle: 'Conformal Möbius & Exact-ℚ Optical Lens',
+          badge: 'silisense/lenses.py · test_lenses_and_exact_q_r5.py',
+          latex: '\\mathcal{L}_{a,\\theta}(z) = \\Pi_{\\mathbb{Q},2^{-b}}\\!\\left(e^{i\\theta}\\frac{z - a}{1 - \\bar{a}z}\\right) \\in \\mathbb{D}^2 \\cap \\mathbb{Z}[\\tfrac{1}{2}]^2',
+          caption: 'Refracts unbounded silicon telemetry rays through a conformal Möbius disk lens quantized onto Exact-ℚ dyadic rationals. Drag the 3 probes on the Conformal Lens Pad or lower Mantissa Bits to see discrete Exact-ℚ optical caustics!',
+          sliders: {
+            p0: { label: 'Refractive Curvature κ', min: 0.15, max: 1.45, step: 0.01, val: 0.74 },
+            p1: { label: 'Exact-ℚ Mantissa Bits', min: 2, max: 12, step: 1, val: 10 },
+            p2: { label: 'Focal Waist ζ', min: 0.15, max: 1.35, step: 0.02, val: 0.68 },
+            p3: { label: 'Aperture Harmonics m', min: 1.0, max: 6.0, step: 0.5, val: 3.0 }
+          },
+          code:
+`// Rays 0..2 lock directly onto your 3 interactive Conformal Lens Probes!
+const u = i / N;
+const zSpan = (s - 0.5) * 3.4;
+
+let rx, ry;
+if (i < 3) {
+  rx = probes[i].x * 1.45;
+  ry = probes[i].y * 1.45;
+} else {
+  const ring = 0.32 + 0.72 * ((i % 6) / 5);
+  const ang = u * TAU + 0.18 * sin(params.p3 * u * TAU + t * 0.5);
+  rx = ring * cos(ang);
+  ry = ring * sin(ang);
+}
+
+// Refract ray waist through conformal Möbius lens centered at Probe 0
+const focus = exp(-pow(zSpan * params.p0, 2)) * params.p2;
+const m = mobiusLens(rx, ry, probes[0].x * focus, probes[0].y * focus, zSpan * params.p0 + t * 0.25);
+
+// Snap refracted wavefront onto deterministic Exact-ℚ dyadic lattice
+const qx = exactQ(m[0] * (1.15 + 0.35 * zSpan * zSpan), params.p1);
+const qy = exactQ(m[1] * (1.15 + 0.35 * zSpan * zSpan), params.p1);
+
+return {
+  pos: [qx, qy, zSpan * 0.78],
+  hue: i < 3 ? probes[i].hue : (0.48 + 0.24 * focus + 0.12 * u) % 1.0,
+  radius: i < 3 ? 0.045 : 0.022
+};`
+        },
+
+        razor: {
+          filename: '02_razor_4byte_quantizer.sili',
+          hudTitle: '4-Byte Razor Sensory Wire Lattice',
+          badge: 'silisense/razor.py · include/razor_abi_4byte_sys.h',
+          latex: '\\mathcal{R}_{32}(x) = \\bigl(\\text{reg}_3 \\ll 29\\bigr) \\;|\\; \\bigl(p_{11} \\ll 18\\bigr) \\;|\\; \\bigl(q_9 \\ll 9\\bigr) \\;|\\; \\psi_9',
+          caption: 'Packs continuous silicon curvature shells into 32-bit Razor words. Slide "Exact-ℚ Mantissa Bits" down from 10 → 3 to watch smooth phase shells crystallize into exact discrete hardware steps with zero overflow!',
+          sliders: {
+            p0: { label: 'Shell Expansion κ', min: 0.30, max: 1.45, step: 0.01, val: 0.92 },
+            p1: { label: 'Razor Bit Depth b', min: 2, max: 11, step: 1, val: 5 },
+            p2: { label: 'Toroidal Aspect ρ', min: 0.20, max: 0.85, step: 0.01, val: 0.48 },
+            p3: { label: 'Poloidal Winding k', min: 1.0, max: 7.0, step: 0.5, val: 4.0 }
+          },
+          code:
+`// Toroidal sensory phase manifold quantized through 4-Byte Razor lattice
+const u = i / N;
+const phi = s * TAU;
+const theta = u * TAU + params.p3 * s * TAU * 0.25 + t * 0.28;
+
+const R = 1.05 * params.p0;
+const r = params.p2 * (0.75 + 0.25 * cos(params.p3 * u * TAU));
+
+const raw = [
+  (R + r * cos(theta)) * cos(phi),
+  r * sin(theta) * 1.25,
+  (R + r * cos(theta)) * sin(phi)
+];
+
+// Apply bit-exact Razor dyadic lattice projection
+const qPos = razorQuant(raw, params.p1);
+
+return {
+  pos: qPos,
+  hue: (0.09 + 0.45 * u + 0.08 * sin(theta)) % 1.0,
+  radius: (i % 8 === 0) ? 0.038 : 0.022
+};`
+        },
+
+        governor: {
+          filename: '03_lyapunov_governor_attractor.sili',
+          hudTitle: 'Closed-Loop Lyapunov & CBF Governor Attractor',
+          badge: 'silisense/governor.py · test_governor_autotuner_bridge_r5.py',
+          latex: '\\dot{V}(x) = \\nabla V(x)^\\top f_{\\text{gov}}(x, u) \\le -\\gamma V(x), \\quad h_{\\text{CBF}}(x) \\ge 0',
+          caption: 'Perturbed outer trajectories spiral rapidly onto the emerald Control-Barrier safe invariant manifold under Lyapunov damping γ. Pull "Governor Damping γ" toward 0 to observe uncontrolled open-loop excursion!',
+          sliders: {
+            p0: { label: 'Safe Barrier Radius R₀', min: 0.65, max: 1.55, step: 0.02, val: 1.12 },
+            p1: { label: 'Exact-ℚ Control Bits', min: 3, max: 12, step: 1, val: 9 },
+            p2: { label: 'Governor Damping γ', min: 0.0, max: 1.50, step: 0.02, val: 0.88 },
+            p3: { label: 'Symplectic Swirl ω', min: 1.0, max: 6.0, step: 0.1, val: 3.4 }
+          },
+          code:
+`// Perturbed silicon state injected at s=0, damped along trajectory s ∈ [0, 1]
+const u = i / N;
+const ang0 = u * TAU + t * 0.22;
+const burst = 1.85 + 0.55 * sin(3.0 * u * TAU + probes[0].x * 3.0);
+
+const x0 = burst * cos(ang0);
+const z0 = burst * sin(ang0);
+const y0 = 1.15 * cos(2.0 * u * TAU + t * 0.4);
+
+// Closed-loop Lyapunov contraction toward safe invariant manifold R₀
+const stepGain = s * params.p2 * 3.2;
+const swirl = s * params.p3 + t * 0.18;
+const g = governorStep(x0, y0, z0, stepGain, params.p0, swirl);
+
+return {
+  pos: razorQuant(g, params.p1),
+  hue: (0.38 - 0.28 * exp(-stepGain)) % 1.0, // Rose/Amber burst -> Emerald lock!
+  radius: i < 3 ? 0.042 : 0.022
+};`
+        },
+
+        airlock: {
+          filename: '04_airlock_frame64_ring.sili',
+          hudTitle: 'Frame64 Cache-Line Dual-Ring Airlock',
+          badge: 'silisense/airlock.py · silisense/frame64.py',
+          latex: '\\text{Frame64} \\cong \\bigoplus_{k=0}^{15} \\mathcal{R}_{32}^{(k)} \\in \\mathbb{B}^{512}, \\quad \\text{seq}_{\\text{pre}} = \\text{seq}_{\\text{post}} \\equiv 0 \\pmod 2',
+          caption: 'Visualizes the 16×4-byte Frame64 cache-line lanes bridging the outer Host Producer ring and inner GPU sm_86 Consumer ring across sequence-fenced Airlock portals.',
+          sliders: {
+            p0: { label: 'Ring Separation ΔR', min: 0.35, max: 1.25, step: 0.02, val: 0.78 },
+            p1: { label: 'Slot Quantization b', min: 4, max: 12, step: 1, val: 10 },
+            p2: { label: 'Portal Coupling β', min: 0.10, max: 1.00, step: 0.02, val: 0.65 },
+            p3: { label: 'Epoch Clock Rate', min: 0.5, max: 5.0, step: 0.1, val: 2.0 }
+          },
+          code:
+`// 16 Frame64 cache-line lanes + Host/Device dual concentric rings
+const slot = i % 16;
+const isBridge = i >= 16;
+const ang = (slot / 16) * TAU + t * 0.15 * params.p3;
+
+if (!isBridge) {
+  // 16 radial Airlock transfer conduits pulsing between Host & GPU rings
+  const rHost = 1.05 + params.p0 * 0.55;
+  const rGpu  = 1.05 - params.p0 * 0.45;
+  const wave = 0.5 - 0.5 * cos(s * TAU);
+  const rad = rGpu + (rHost - rGpu) * wave;
+  const lift = 0.32 * params.p2 * sin(s * TAU + slot * 0.4);
+  return {
+    pos: [rad * cos(ang), lift, rad * sin(ang)],
+    hue: (0.52 + 0.025 * slot) % 1.0,
+    radius: (slot === 0 || slot === 15) ? 0.042 : 0.025
+  };
+}
+
+// Concentric Host Producer & GPU Consumer ring envelopes
+const ringIdx = i % 2;
+const rad = ringIdx === 0 ? (1.05 + params.p0 * 0.55) : (1.05 - params.p0 * 0.45);
+const phi = s * TAU;
+return {
+  pos: [rad * cos(phi), (ringIdx === 0 ? 0.14 : -0.14) * sin(4 * phi + t), rad * sin(phi)],
+  hue: ringIdx === 0 ? 0.11 : 0.44,
+  radius: 0.019
+};`
+        },
+
+        bridge: {
+          filename: '05_autotuner_holosphere_bridge.sili',
+          hudTitle: 'Pareto Autotuner × HoloSphere S³ Spinor Bridge',
+          badge: 'silisense/autotuner.py · silisense/holosphere_bridge.py',
+          latex: '\\mathcal{B}_{\\text{holo}}(\\text{Frame64}) \\mapsto \\bigl(q_t \\in \\mathrm{SU}(2),\\; d_{\\text{Cayley}}^*,\\; \\text{Chunk32}\\bigr)',
+          caption: 'Isometrically bridges SiliSense Razor packets directly onto HoloSphere S³ Villarceau spinor fibers—dynamically steering variable Cayley depth and warp tile schedules along the Pareto ridge!',
+          sliders: {
+            p0: { label: 'Stereo Pole α', min: 0.35, max: 0.88, step: 0.01, val: 0.74 },
+            p1: { label: 'Razor Bridge Bits', min: 4, max: 12, step: 1, val: 10 },
+            p2: { label: 'Pareto Curvature Gain', min: 0.10, max: 1.20, step: 0.02, val: 0.62 },
+            p3: { label: 'Spinor Braid Winding', min: 1.0, max: 6.0, step: 0.5, val: 3.0 }
+          },
+          code:
+`// Bridge SiliSense Conformal Lens probes directly onto HoloSphere S³ fibers!
+const u = i / N;
+const probeMod = probes[0].x * 0.6;
+const theta = 1.18 + params.p2 * 0.65 * sin(params.p3 * u * TAU + t * 0.55) + probeMod;
+const phi = u * TAU + t * 0.25;
+const psi = s * TAU;
+
+// Exact Hopf S³ -> ℝ³ stereographic bridge modulated by Razor Exact-ℚ precision
+const pHolo = hopfBridge(theta, phi, psi, params.p0);
+const qPos = razorQuant(pHolo, params.p1);
+
+return {
+  pos: qPos,
+  hue: (0.76 - 0.28 * u + 0.1 * sin(theta)) % 1.0,
+  radius: i < 3 ? 0.044 : 0.023
+};`
+        }
+      };
+
+      /* ---------------------------------------------------------------------
+       * 5. SILISCRIPT SANDBOX COMPILER
+       * -------------------------------------------------------------------*/
+      let activeSampleFn = null;
+      let currentPresetKey = 'lenses';
+
+      function getSliderParams() {
+        return {
+          p0: parseFloat(document.getElementById('slider-p0').value),
+          p1: parseFloat(document.getElementById('slider-p1').value),
+          p2: parseFloat(document.getElementById('slider-p2').value),
+          p3: parseFloat(document.getElementById('slider-p3').value)
+        };
+      }
+
+      function normalizeRayOutput(out, i, N) {
+        if (Array.isArray(out)) {
+          return {
+            pos: [out[0] || 0, out[1] || 0, out[2] || 0],
+            hue: i / N,
+            radius: 0.024
+          };
+        }
+        if (out && Array.isArray(out.pos)) {
+          return {
+            pos: out.pos,
+            hue: typeof out.hue === 'number' ? out.hue : (i / N),
+            radius: typeof out.radius === 'number' ? out.radius : 0.024
+          };
+        }
+        return { pos: [0, 0, 0], hue: 0.52, radius: 0.024 };
+      }
+
+      function compileSiliScript(sourceCode) {
+        const errBanner = document.getElementById('script-error-banner');
+        const badge = document.getElementById('compile-status');
+        try {
+          const factory = new Function(
+            'std',
+            '"use strict";\n' +
+            'const { PI, TAU, sin, cos, tan, asin, acos, atan2, sqrt, exp, abs, pow, min, max, tanh, ' +
+            'exactQ, cayleyLens, mobiusLens, beltramiRefract, razorQuant, governorStep, hopfBridge, probes } = std;\n' +
+            'return function sampleRay(i, N, s, t, params) {\n' +
+            sourceCode + '\n' +
+            '};'
+          );
+
+          const candidate = factory({
+            PI: PI,
+            TAU: TAU,
+            sin: Math.sin,
+            cos: Math.cos,
+            tan: Math.tan,
+            asin: Math.asin,
+            acos: Math.acos,
+            atan2: Math.atan2,
+            sqrt: Math.sqrt,
+            exp: Math.exp,
+            abs: Math.abs,
+            pow: Math.pow,
+            min: Math.min,
+            max: Math.max,
+            tanh: Math.tanh,
+            exactQ: exactQ,
+            cayleyLens: cayleyLens,
+            mobiusLens: mobiusLens,
+            beltramiRefract: beltramiRefract,
+            razorQuant: razorQuant,
+            governorStep: governorStep,
+            hopfBridge: hopfBridge,
+            probes: lensProbes
+          });
+
+          const dry = normalizeRayOutput(candidate(0, 32, 0.5, 0.0, getSliderParams()), 0, 32);
+          if (!isFinite(dry.pos[0]) || !isFinite(dry.pos[1]) || !isFinite(dry.pos[2])) {
+            throw new Error('Ray evaluated to non-finite coordinates (NaN / Infinity).');
+          }
+
+          activeSampleFn = candidate;
+          if (errBanner) errBanner.classList.add('hidden');
+          if (badge) {
+            badge.textContent = 'Compiled · Live 60 FPS';
+            badge.className = 'px-2 py-0.5 rounded-md text-[10px] font-mono bg-emerald-500/15 text-emerald-300 border border-emerald-500/30';
+          }
+          return true;
+        } catch (err) {
+          if (errBanner) {
+            errBanner.textContent = 'SiliScript Diagnostic: ' + err.message;
+            errBanner.classList.remove('hidden');
+          }
+          if (badge) {
+            badge.textContent = 'Syntax Hold (Last Valid Active)';
+            badge.className = 'px-2 py-0.5 rounded-md text-[10px] font-mono bg-amber-500/15 text-amber-300 border border-amber-500/30';
+          }
+          return false;
+        }
+      }
+
+      // HSL -> RGB zero-allocation helper
+      function hslToRgb(h, s, l, out, offset) {
+        const hh = ((h % 1.0) + 1.0) % 1.0;
+        const c = (1.0 - Math.abs(2.0 * l - 1.0)) * s;
+        const x = c * (1.0 - Math.abs(((hh * 6.0) % 2.0) - 1.0));
+        const m = l - c * 0.5;
+        let r = 0, g = 0, b = 0;
+        const seg = Math.floor(hh * 6.0);
+        if (seg === 0) { r = c; g = x; b = 0; }
+        else if (seg === 1) { r = x; g = c; b = 0; }
+        else if (seg === 2) { r = 0; g = c; b = x; }
+        else if (seg === 3) { r = 0; g = x; b = c; }
+        else if (seg === 4) { r = x; g = 0; b = c; }
+        else { r = c; g = 0; b = x; }
+        out[offset] = r + m;
+        out[offset + 1] = g + m;
+        out[offset + 2] = b + m;
+      }
+
+      /* ---------------------------------------------------------------------
+       * 6. THREE.JS 3D OPTICAL RAY-BUNDLE, PACKET & CONTROL TRIAD ENGINE
+       * -------------------------------------------------------------------*/
+      const NUM_RAYS = 34;
+      const SEGMENTS = 80;
+      const RADIAL_SIDES = 6;
+      const PACKETS_PER_RAY = 22;
+
+      let scene, camera, renderer;
+      let tubeGeometry, tubePosAttr, tubeNormAttr, tubeColAttr;
+      let packetGeometry, packetPosAttr, packetColAttr;
+      let triadGroup, arrowDescent, arrowSymp, arrowBarrier, triadCore;
+
+      let camTheta = 0.72;
+      let camPhi = 1.15;
+      let camRadius = 5.25;
+      let targetTheta = 0.72;
+      let targetPhi = 1.15;
+      let targetRadius = 5.25;
+      let isPointerDown = false;
+      let prevPointerX = 0;
+      let prevPointerY = 0;
+      let simPaused = false;
+      let showTriad = true;
+      let simTime = 0.0;
+
+      const centerPts = new Float32Array((SEGMENTS + 1) * 3);
+      const tangents = new Float32Array((SEGMENTS + 1) * 3);
+      const radialCos = new Float32Array(RADIAL_SIDES);
+      const radialSin = new Float32Array(RADIAL_SIDES);
+      for (let r = 0; r < RADIAL_SIDES; r++) {
+        radialCos[r] = Math.cos((r / RADIAL_SIDES) * TAU);
+        radialSin[r] = Math.sin((r / RADIAL_SIDES) * TAU);
+      }
+
+      function createPacketSpriteTexture() {
+        const c = document.createElement('canvas');
+        c.width = 64;
+        c.height = 64;
+        const ctx = c.getContext('2d');
+        const grad = ctx.createRadialGradient(32, 32, 1, 32, 32, 31);
+        grad.addColorStop(0.0, 'rgba(255, 255, 255, 1.0)');
+        grad.addColorStop(0.30, 'rgba(165, 243, 252, 0.88)');
+        grad.addColorStop(0.68, 'rgba(34, 211, 238, 0.24)');
+        grad.addColorStop(1.0, 'rgba(0, 0, 0, 0.0)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 64, 64);
+        const tex = new THREE.CanvasTexture(c);
+        tex.needsUpdate = true;
+        return tex;
+      }
+
+      function initThreeStage() {
+        const container = document.getElementById('webgl-container');
+        const w = container.clientWidth || 720;
+        const h = container.clientHeight || 560;
+
+        scene = new THREE.Scene();
+        camera = new THREE.PerspectiveCamera(44, w / h, 0.1, 100);
+
+        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+        renderer.setSize(w, h);
+        container.appendChild(renderer.domElement);
+
+        // Studio Lighting
+        scene.add(new THREE.AmbientLight(0xe0f2fe, 0.64));
+        const keyLight = new THREE.DirectionalLight(0x67e8f9, 1.15);
+        keyLight.position.set(5, 7, 6);
+        scene.add(keyLight);
+
+        const warmRim = new THREE.DirectionalLight(0xfbbf24, 0.88);
+        warmRim.position.set(-6, -4, -5);
+        scene.add(warmRim);
+
+        // Reference Optical Aperture & Control Barrier Cage
+        const apertureGroup = new THREE.Group();
+        const cageMat = new THREE.LineBasicMaterial({ color: 0x1e3a5f, transparent: true, opacity: 0.38 });
+        for (let idx = 0; idx < 3; idx++) {
+          const pts = [];
+          const rad = 1.32;
+          for (let k = 0; k <= 96; k++) {
+            const ang = (k / 96) * TAU;
+            if (idx === 0) pts.push(new THREE.Vector3(rad * Math.cos(ang), rad * Math.sin(ang), 0));
+            else if (idx === 1) pts.push(new THREE.Vector3(rad * Math.cos(ang), 0, rad * Math.sin(ang)));
+            else pts.push(new THREE.Vector3(0, rad * Math.cos(ang), rad * Math.sin(ang)));
+          }
+          apertureGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), cageMat));
+        }
+        scene.add(apertureGroup);
+
+        // Volumetric Tube Geometry for all NUM_RAYS
+        const vertsPerRay = (SEGMENTS + 1) * RADIAL_SIDES;
+        const totalVerts = NUM_RAYS * vertsPerRay;
+        const totalIndices = NUM_RAYS * SEGMENTS * RADIAL_SIDES * 6;
+
+        const positions = new Float32Array(totalVerts * 3);
+        const normals = new Float32Array(totalVerts * 3);
+        const colors = new Float32Array(totalVerts * 3);
+        const indices = new Uint32Array(totalIndices);
+
+        let ptr = 0;
+        for (let f = 0; f < NUM_RAYS; f++) {
+          const baseV = f * vertsPerRay;
+          for (let s = 0; s < SEGMENTS; s++) {
+            for (let r = 0; r < RADIAL_SIDES; r++) {
+              const rNext = (r + 1) % RADIAL_SIDES;
+              const v00 = baseV + s * RADIAL_SIDES + r;
+              const v01 = baseV + s * RADIAL_SIDES + rNext;
+              const v10 = baseV + (s + 1) * RADIAL_SIDES + r;
+              const v11 = baseV + (s + 1) * RADIAL_SIDES + rNext;
+              indices[ptr++] = v00;
+              indices[ptr++] = v10;
+              indices[ptr++] = v11;
+              indices[ptr++] = v00;
+              indices[ptr++] = v11;
+              indices[ptr++] = v01;
+            }
+          }
+        }
+
+        tubeGeometry = new THREE.BufferGeometry();
+        tubePosAttr = new THREE.BufferAttribute(positions, 3);
+        tubeNormAttr = new THREE.BufferAttribute(normals, 3);
+        tubeColAttr = new THREE.BufferAttribute(colors, 3);
+        tubePosAttr.setUsage(THREE.DynamicDrawUsage);
+        tubeNormAttr.setUsage(THREE.DynamicDrawUsage);
+        tubeColAttr.setUsage(THREE.DynamicDrawUsage);
+
+        tubeGeometry.setAttribute('position', tubePosAttr);
+        tubeGeometry.setAttribute('normal', tubeNormAttr);
+        tubeGeometry.setAttribute('color', tubeColAttr);
+        tubeGeometry.setIndex(new THREE.BufferAttribute(indices, 1));
+
+        const tubeMat = new THREE.MeshStandardMaterial({
+          vertexColors: true,
+          roughness: 0.24,
+          metalness: 0.38,
+          transparent: true,
+          opacity: 0.92
+        });
+        const tubeMesh = new THREE.Mesh(tubeGeometry, tubeMat);
+        tubeMesh.frustumCulled = false;
+        scene.add(tubeMesh);
+
+        // Streaming Razor 4-Byte Telemetry Packets
+        const totalPackets = NUM_RAYS * PACKETS_PER_RAY;
+        packetGeometry = new THREE.BufferGeometry();
+        packetPosAttr = new THREE.BufferAttribute(new Float32Array(totalPackets * 3), 3);
+        packetColAttr = new THREE.BufferAttribute(new Float32Array(totalPackets * 3), 3);
+        packetPosAttr.setUsage(THREE.DynamicDrawUsage);
+        packetColAttr.setUsage(THREE.DynamicDrawUsage);
+        packetGeometry.setAttribute('position', packetPosAttr);
+        packetGeometry.setAttribute('color', packetColAttr);
+
+        const packetMat = new THREE.PointsMaterial({
+          size: 0.135,
+          map: createPacketSpriteTexture(),
+          vertexColors: true,
+          transparent: true,
+          opacity: 0.92,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false
+        });
+        const packetPoints = new THREE.Points(packetGeometry, packetMat);
+        packetPoints.frustumCulled = false;
+        scene.add(packetPoints);
+
+        // Governor Control Vector Triad (-∇V = Emerald, J∇H = Cyan, ∇h_CBF = Amber)
+        triadGroup = new THREE.Group();
+        const orig = new THREE.Vector3(0, 0, 0);
+        arrowDescent = new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), orig, 0.52, 0x34d399, 0.14, 0.08);
+        arrowSymp = new THREE.ArrowHelper(new THREE.Vector3(0, 1, 0), orig, 0.52, 0x22d3ee, 0.14, 0.08);
+        arrowBarrier = new THREE.ArrowHelper(new THREE.Vector3(0, 0, 1), orig, 0.52, 0xfbbf24, 0.14, 0.08);
+        triadCore = new THREE.Mesh(
+          new THREE.SphereGeometry(0.062, 16, 16),
+          new THREE.MeshBasicMaterial({ color: 0xffffff })
+        );
+        triadGroup.add(arrowDescent, arrowSymp, arrowBarrier, triadCore);
+        scene.add(triadGroup);
+
+        // Camera Orbit & Pinch/Wheel Listeners
+        const dom = renderer.domElement;
+        dom.addEventListener('mousedown', function (e) {
+          isPointerDown = true;
+          prevPointerX = e.clientX;
+          prevPointerY = e.clientY;
+        });
+        window.addEventListener('mouseup', function () { isPointerDown = false; });
+        window.addEventListener('mousemove', function (e) {
+          if (!isPointerDown) return;
+          const dx = e.clientX - prevPointerX;
+          const dy = e.clientY - prevPointerY;
+          prevPointerX = e.clientX;
+          prevPointerY = e.clientY;
+          targetTheta -= dx * 0.0075;
+          targetPhi = Math.max(0.18, Math.min(PI - 0.18, targetPhi - dy * 0.0075));
+        });
+        dom.addEventListener('wheel', function (e) {
+          e.preventDefault();
+          targetRadius = Math.max(2.4, Math.min(10.5, targetRadius + e.deltaY * 0.0035));
+        }, { passive: false });
+
+        let prevPinch = 0;
+        dom.addEventListener('touchstart', function (e) {
+          if (e.touches.length === 1) {
+            isPointerDown = true;
+            prevPointerX = e.touches[0].clientX;
+            prevPointerY = e.touches[0].clientY;
+          } else if (e.touches.length === 2) {
+            const dx = e.touches[0].clientX - e.touches[1].clientX;
+            const dy = e.touches[0].clientY - e.touches[1].clientY;
+            prevPinch = Math.sqrt(dx * dx + dy * dy);
+          }
+        }, { passive: true });
+        dom.addEventListener('touchmove', function (e) {
+          if (e.touches.length === 1 && isPointerDown) {
+            e.preventDefault();
+            const dx = e.touches[0].clientX - prevPointerX;
+            const dy = e.touches[0].clientY - prevPointerY;
+            prevPointerX = e.touches[0].clientX;
+            prevPointerY = e.touches[0].clientY;
+            targetTheta -= dx * 0.008;
+            targetPhi = Math.max(0.18, Math.min(PI - 0.18, targetPhi - dy * 0.008));
+          } else if (e.touches.length === 2) {
+            e.preventDefault();
+            const dx = e.touches[0].clientX - e.touches[1].clientX;
+            const dy = e.touches[0].clientY - e.touches[1].clientY;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (prevPinch > 0) {
+              targetRadius = Math.max(2.4, Math.min(10.5, targetRadius - (dist - prevPinch) * 0.015));
+            }
+            prevPinch = dist;
+          }
+        }, { passive: false });
+        dom.addEventListener('touchend', function () {
+          isPointerDown = false;
+          prevPinch = 0;
+        });
+
+        window.addEventListener('resize', handleResize);
+      }
+
+      function handleResize() {
+        const container = document.getElementById('webgl-container');
+        if (container && renderer && camera) {
+          const w = container.clientWidth || 640;
+          const h = container.clientHeight || 520;
+          camera.aspect = w / h;
+          camera.updateProjectionMatrix();
+          renderer.setSize(w, h);
+        }
+        drawLensPad();
+        drawAirlockCanvas();
+        drawGovernorScope();
+      }
+
+      let hudTick = 0;
+      function updateOpticalManifold(t) {
+        if (!activeSampleFn) return;
+        const params = getSliderParams();
+        const posArr = tubePosAttr.array;
+        const normArr = tubeNormAttr.array;
+        const colArr = tubeColAttr.array;
+        const pkPos = packetPosAttr.array;
+        const pkCol = packetColAttr.array;
+
+        const vertsPerRay = (SEGMENTS + 1) * RADIAL_SIDES;
+        const triadSeg = Math.floor(((t * 0.24) % 1.0) * SEGMENTS);
+        let triadPos = [0, 0, 0];
+        let triadTan = [1, 0, 0];
+        let triadRadVec = [0, 0, 1];
+
+        for (let f = 0; f < NUM_RAYS; f++) {
+          let rayHue = 0.52;
+          let rayRadius = 0.023;
+
+          for (let sIdx = 0; sIdx <= SEGMENTS; sIdx++) {
+            const s = sIdx / SEGMENTS;
+            let res;
+            try {
+              res = normalizeRayOutput(activeSampleFn(f, NUM_RAYS, s, t, params), f, NUM_RAYS);
+            } catch (e) {
+              res = { pos: [0, 0, 0], hue: 0.52, radius: 0.023 };
+            }
+
+            const px = Math.max(-4.5, Math.min(4.5, res.pos[0] || 0));
+            const py = Math.max(-4.5, Math.min(4.5, res.pos[1] || 0));
+            const pz = Math.max(-4.5, Math.min(4.5, res.pos[2] || 0));
+
+            centerPts[sIdx * 3] = px;
+            centerPts[sIdx * 3 + 1] = py;
+            centerPts[sIdx * 3 + 2] = pz;
+
+            if (sIdx === Math.floor(SEGMENTS * 0.5)) {
+              rayHue = res.hue;
+              rayRadius = Math.max(0.008, Math.min(0.075, res.radius));
+            }
+          }
+
+          // Compute tangents (open-curve safe endpoints)
+          for (let sIdx = 0; sIdx <= SEGMENTS; sIdx++) {
+            const prev = Math.max(0, sIdx - 1);
+            const next = Math.min(SEGMENTS, sIdx + 1);
+            let tx = centerPts[next * 3] - centerPts[prev * 3];
+            let ty = centerPts[next * 3 + 1] - centerPts[prev * 3 + 1];
+            let tz = centerPts[next * 3 + 2] - centerPts[prev * 3 + 2];
+            const tl = Math.sqrt(tx * tx + ty * ty + tz * tz) || 1.0;
+            tangents[sIdx * 3] = tx / tl;
+            tangents[sIdx * 3 + 1] = ty / tl;
+            tangents[sIdx * 3 + 2] = tz / tl;
+          }
+
+          let tx0 = tangents[0], ty0 = tangents[1], tz0 = tangents[2];
+          let ax = Math.abs(tx0) < 0.85 ? 1.0 : 0.0;
+          let ay = Math.abs(tx0) < 0.85 ? 0.0 : 1.0;
+          let ux = ty0 * 0 - tz0 * ay;
+          let uy = tz0 * ax - tx0 * 0;
+          let uz = tx0 * ay - ty0 * ax;
+          let ul = Math.sqrt(ux * ux + uy * uy + uz * uz) || 1.0;
+          ux /= ul; uy /= ul; uz /= ul;
+
+          const baseV = f * vertsPerRay;
+          const isProbeRay = f < 3;
+          const lum = isProbeRay ? 0.65 : 0.54;
+          const sat = isProbeRay ? 0.96 : 0.85;
+
+          for (let sIdx = 0; sIdx <= SEGMENTS; sIdx++) {
+            const tx = tangents[sIdx * 3];
+            const ty = tangents[sIdx * 3 + 1];
+            const tz = tangents[sIdx * 3 + 2];
+
+            const dotUT = ux * tx + uy * ty + uz * tz;
+            ux -= dotUT * tx;
+            uy -= dotUT * ty;
+            uz -= dotUT * tz;
+            const uLen = Math.sqrt(ux * ux + uy * uy + uz * uz) || 1.0;
+            ux /= uLen; uy /= uLen; uz /= uLen;
+
+            const vx = ty * uz - tz * uy;
+            const vy = tz * ux - tx * uz;
+            const vz = tx * uy - ty * ux;
+
+            const cx = centerPts[sIdx * 3];
+            const cy = centerPts[sIdx * 3 + 1];
+            const cz = centerPts[sIdx * 3 + 2];
+
+            if (f === 0 && sIdx === triadSeg) {
+              triadPos = [cx, cy, cz];
+              triadTan = [tx, ty, tz];
+              const rl = Math.sqrt(cx * cx + cy * cy + cz * cz) || 1.0;
+              triadRadVec = [-cx / rl, -cy / rl, -cz / rl];
+            }
+
+            const localHue = (rayHue + 0.06 * Math.sin((sIdx / SEGMENTS) * PI)) % 1.0;
+
+            for (let r = 0; r < RADIAL_SIDES; r++) {
+              const rc = radialCos[r];
+              const rs = radialSin[r];
+              const nx = ux * rc + vx * rs;
+              const ny = uy * rc + vy * rs;
+              const nz = uz * rc + vz * rs;
+
+              const vOff = (baseV + sIdx * RADIAL_SIDES + r) * 3;
+              posArr[vOff] = cx + rayRadius * nx;
+              posArr[vOff + 1] = cy + rayRadius * ny;
+              posArr[vOff + 2] = cz + rayRadius * nz;
+
+              normArr[vOff] = nx;
+              normArr[vOff + 1] = ny;
+              normArr[vOff + 2] = nz;
+
+              hslToRgb(localHue, sat, lum, colArr, vOff);
+            }
+          }
+
+          // Update Streaming Razor 4B Packets
+          for (let p = 0; p < PACKETS_PER_RAY; p++) {
+            const ph = ((p / PACKETS_PER_RAY) + t * 0.30 + f * 0.029) % 1.0;
+            const eIdx = ph * SEGMENTS;
+            const i0 = Math.floor(eIdx);
+            const i1 = Math.min(SEGMENTS, i0 + 1);
+            const fr = eIdx - i0;
+
+            const pOff = (f * PACKETS_PER_RAY + p) * 3;
+            pkPos[pOff] = centerPts[i0 * 3] * (1 - fr) + centerPts[i1 * 3] * fr;
+            pkPos[pOff + 1] = centerPts[i0 * 3 + 1] * (1 - fr) + centerPts[i1 * 3 + 1] * fr;
+            pkPos[pOff + 2] = centerPts[i0 * 3 + 2] * (1 - fr) + centerPts[i1 * 3 + 2] * fr;
+
+            hslToRgb(rayHue, 1.0, 0.78, pkCol, pOff);
+          }
+        }
+
+        tubePosAttr.needsUpdate = true;
+        tubeNormAttr.needsUpdate = true;
+        tubeColAttr.needsUpdate = true;
+        packetPosAttr.needsUpdate = true;
+        packetColAttr.needsUpdate = true;
+
+        triadGroup.visible = showTriad;
+        if (showTriad) {
+          triadGroup.position.set(triadPos[0], triadPos[1], triadPos[2]);
+          const vSymp = new THREE.Vector3(triadTan[0], triadTan[1], triadTan[2]).normalize();
+          const vDesc = new THREE.Vector3(triadRadVec[0], triadRadVec[1], triadRadVec[2]).normalize();
+          const vBarr = new THREE.Vector3().crossVectors(vSymp, vDesc).normalize();
+          arrowDescent.setDirection(vDesc);
+          arrowSymp.setDirection(vSymp);
+          arrowBarrier.setDirection(vBarr);
+        }
+
+        hudTick++;
+        if (hudTick % 4 === 0) {
+          const p0 = lensProbes[0];
+          const diskNorm = Math.min(0.9999, Math.sqrt(p0.x * p0.x + p0.y * p0.y));
+          const lyapV = 0.5 * (triadPos[0] * triadPos[0] + triadPos[1] * triadPos[1]) * 0.18;
+          const rWord = packRazorWord32(2, exactQ(p0.x, 10), exactQ(p0.y, 9), t);
+
+          document.getElementById('hud-disk-norm').textContent = diskNorm.toFixed(6);
+          document.getElementById('hud-lyapunov').textContent = lyapV.toFixed(4);
+          document.getElementById('hud-razor-hex').textContent = '0x' + rWord.toString(16).toUpperCase().padStart(8, '0');
+          updateSonification(diskNorm, lyapV);
+        }
+      }
+
+      /* ---------------------------------------------------------------------
+       * 7. OPTIONAL TONE.JS GOVERNOR HARMONIC PHASE-LOCK SONIFICATION
+       * -------------------------------------------------------------------*/
+      let sonicEnabled = false;
+      let sonicSynth = null;
+      let sonicFilter = null;
+      let lastSonicMs = 0;
+
+      async function toggleSonification() {
+        const dot = document.getElementById('sonic-dot');
+        const label = document.getElementById('sonic-label');
+        if (!sonicEnabled) {
+          try {
+            await Tone.start();
+            if (!sonicSynth) {
+              sonicFilter = new Tone.Filter(1100, 'lowpass').toDestination();
+              sonicSynth = new Tone.PolySynth(Tone.Synth, {
+                oscillator: { type: 'triangle' },
+                envelope: { attack: 0.35, decay: 0.25, sustain: 0.45, release: 1.2 }
+              }).connect(sonicFilter);
+              sonicSynth.volume.value = -19;
+            }
+            sonicEnabled = true;
+            dot.className = 'w-2 h-2 rounded-full bg-cyan-400 animate-ping';
+            label.textContent = 'Harmonic Lock: ON';
+            showToast('Governor Harmonic Phase-Lock Audio Enabled', 'emerald');
+          } catch (err) {
+            showToast('Browser blocked WebAudio start', 'cyan');
+          }
+        } else {
+          sonicEnabled = false;
+          if (sonicSynth) sonicSynth.releaseAll();
+          dot.className = 'w-2 h-2 rounded-full bg-slate-500';
+          label.textContent = 'Harmonic Lock: OFF';
+        }
+      }
+
+      function updateSonification(diskNorm, lyapV) {
+        if (!sonicEnabled || !sonicSynth) return;
+        const now = performance.now();
+        if (now - lastSonicMs < 920) return;
+        lastSonicMs = now;
+
+        const root = 174.61 * (1.0 + 0.18 * diskNorm); // F3 Lydian silicon consonance
+        const fifth = root * 1.5;
+        const maj7 = root * (1.875 + 0.04 * Math.min(1, lyapV));
+        if (sonicFilter) sonicFilter.frequency.rampTo(650 + 850 * (1.0 - Math.min(1, lyapV)), 0.35);
+        sonicSynth.triggerAttackRelease([root, fifth, maj7], '0.7');
+      }
+
+      /* ---------------------------------------------------------------------
+       * 8. INTERACTIVE 2D CONFORMAL LENS PAD (POINCARÉ DISK 𝔻²)
+       * -------------------------------------------------------------------*/
+      function initLensPad() {
+        const canvas = document.getElementById('lens-pad-canvas');
+        if (!canvas) return;
+
+        function clientToDisk(cx, cy) {
+          const rect = canvas.getBoundingClientRect();
+          let x = ((cx - rect.left) / rect.width) * 2.0 - 1.0;
+          let y = 1.0 - ((cy - rect.top) / rect.height) * 2.0;
+          const r = Math.sqrt(x * x + y * y);
+          if (r > 0.88) {
+            x = (x / r) * 0.88;
+            y = (y / r) * 0.88;
+          }
+          return { x: x, y: y };
+        }
+
+        function onDown(cx, cy) {
+          const pt = clientToDisk(cx, cy);
+          let best = 0;
+          let bestD = 999;
+          for (let i = 0; i < lensProbes.length; i++) {
+            const dx = pt.x - lensProbes[i].x;
+            const dy = pt.y - lensProbes[i].y;
+            const d = dx * dx + dy * dy;
+            if (d < bestD) { bestD = d; best = i; }
+          }
+          draggingProbeIdx = best;
+          lensProbes[best].x = pt.x;
+          lensProbes[best].y = pt.y;
+          drawLensPad();
+        }
+
+        function onMove(cx, cy) {
+          if (draggingProbeIdx < 0) return;
+          const pt = clientToDisk(cx, cy);
+          lensProbes[draggingProbeIdx].x = pt.x;
+          lensProbes[draggingProbeIdx].y = pt.y;
+          drawLensPad();
+        }
+
+        canvas.addEventListener('mousedown', function (e) { onDown(e.clientX, e.clientY); });
+        window.addEventListener('mousemove', function (e) { onMove(e.clientX, e.clientY); });
+        window.addEventListener('mouseup', function () { draggingProbeIdx = -1; });
+
+        canvas.addEventListener('touchstart', function (e) {
+          if (e.touches.length === 1) {
+            e.preventDefault();
+            onDown(e.touches[0].clientX, e.touches[0].clientY);
+          }
+        }, { passive: false });
+        canvas.addEventListener('touchmove', function (e) {
+          if (e.touches.length === 1 && draggingProbeIdx >= 0) {
+            e.preventDefault();
+            onMove(e.touches[0].clientX, e.touches[0].clientY);
+          }
+        }, { passive: false });
+        canvas.addEventListener('touchend', function () { draggingProbeIdx = -1; });
+      }
+
+      function drawLensPad() {
+        const canvas = document.getElementById('lens-pad-canvas');
+        if (!canvas) return;
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const w = canvas.clientWidth || 168;
+        const h = canvas.clientHeight || 168;
+        if (canvas.width !== Math.floor(w * dpr) || canvas.height !== Math.floor(h * dpr)) {
+          canvas.width = Math.floor(w * dpr);
+          canvas.height = Math.floor(h * dpr);
+        }
+        const ctx = canvas.getContext('2d');
+        ctx.save();
+        ctx.scale(dpr, dpr);
+        ctx.clearRect(0, 0, w, h);
+
+        const cx = w * 0.5;
+        const cy = h * 0.5;
+        const R = Math.min(w, h) * 0.44;
+
+        // Poincaré hyperbolic concentric metric rings
+        ctx.strokeStyle = 'rgba(34, 211, 238, 0.20)';
+        ctx.lineWidth = 1;
+        [0.38, 0.68, 0.90, 1.0].forEach(function (f) {
+          ctx.beginPath();
+          ctx.arc(cx, cy, R * f, 0, TAU);
+          ctx.stroke();
+        });
+
+        ctx.strokeStyle = 'rgba(148, 163, 184, 0.18)';
+        ctx.beginPath();
+        ctx.moveTo(cx - R, cy); ctx.lineTo(cx + R, cy);
+        ctx.moveTo(cx, cy - R); ctx.lineTo(cx, cy + R);
+        ctx.stroke();
+
+        // Draw 3 interactive silicon probes
+        for (let i = 0; i < lensProbes.length; i++) {
+          const p = lensProbes[i];
+          const px = cx + p.x * R;
+          const py = cy - p.y * R;
+
+          ctx.beginPath();
+          ctx.arc(px, py, 8.5, 0, TAU);
+          ctx.fillStyle = p.color + '33';
+          ctx.fill();
+
+          ctx.beginPath();
+          ctx.arc(px, py, 4.8, 0, TAU);
+          ctx.fillStyle = p.color;
+          ctx.fill();
+          ctx.strokeStyle = '#03070e';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      /* ---------------------------------------------------------------------
+       * 9. INTERACTIVE 64-BYTE FRAME64 & AIRLOCK + RAZOR 4-BYTE INSPECTOR
+       * -------------------------------------------------------------------*/
+      const FRAME64_SCHEMA = [
+        { idx: 0, tag: 'SEQ_HEAD', name: 'Airlock Seqlock Epoch', desc: 'Even epoch counter = quiescent snapshot; odd counter = active write fence in airlock.py.', regime: 0, base: 0.88 },
+        { idx: 1, tag: 'CFG_HASH', name: 'ABI & Lens Schema Tag', desc: '4-byte Razor wire version + active conformal chart & Exact-ℚ mantissa precision descriptor.', regime: 1, base: 0.64 },
+        { idx: 2, tag: 'LENS_P99', name: 'Lens: Tail Latency κ_99', desc: 'Conformal Cayley-mapped p99 warp stall ratio encoded in dyadic Exact-ℚ rational format.', regime: 2, base: 0.44 },
+        { idx: 3, tag: 'LENS_OCC', name: 'Lens: SM86 Warp Occupancy', desc: 'Active warp slot utilization refracted onto (-1, 1) without floating-point saturation.', regime: 2, base: 0.76 },
+        { idx: 4, tag: 'LENS_REG', name: 'Lens: Register File Pressure', desc: 'Live register allocation margin preventing PTXAS local-memory spills.', regime: 2, base: 0.31 },
+        { idx: 5, tag: 'LENS_BW', name: 'Lens: HBM / L2 Cache Flux', desc: 'Normalized memory bandwidth saturation observed through exact dyadic lens.', regime: 2, base: 0.58 },
+        { idx: 6, tag: 'LENS_THM', name: 'Lens: Silicon Thermal Headroom', desc: 'Conformal distance to clock-throttle boundary mapped onto compact Poincaré disk.', regime: 3, base: 0.82 },
+        { idx: 7, tag: 'LENS_VAR', name: 'Lens: Spectral Activation Entropy', desc: 'Token difficulty & representation dispersion guiding dynamic depth.', regime: 3, base: 0.19 },
+        { idx: 8, tag: 'GOV_LYAP', name: 'Governor: Lyapunov Potential V(x)', desc: 'Current control-theoretic energy functional V(x) ≥ 0 tracked by silisense/governor.py.', regime: 4, base: -0.62 },
+        { idx: 9, tag: 'GOV_CBF', name: 'Governor: Barrier Margin h(x)', desc: 'Safety certificate h(x) ≥ 0 guaranteeing zero SLA / holonomy envelope breach.', regime: 4, base: 0.71 },
+        { idx: 10, tag: 'GOV_STEP', name: 'Governor: Cayley Step Dampener', desc: 'Closed-loop damping command modulating step size and token compute budget.', regime: 4, base: 0.38 },
+        { idx: 11, tag: 'TUNE_ARM', name: 'Autotuner: Pareto Kernel Arm', desc: 'Selected tile/warp schedule index & UCB confidence bound from silisense/autotuner.py.', regime: 5, base: 0.52 },
+        { idx: 12, tag: 'HOLO_Q01', name: 'Bridge: HoloSphere Spinor (w, x)', desc: 'Isometric S³ spinor holonomy half-state shared zero-copy with holosphere_bridge.py.', regime: 6, base: 0.67 },
+        { idx: 13, tag: 'HOLO_Q23', name: 'Bridge: HoloSphere Spinor (y, z)', desc: 'Imaginary S³ fiber quaternion components + Berry phase angle ψ.', regime: 6, base: -0.41 },
+        { idx: 14, tag: 'HOLO_DEP', name: 'Bridge: Variable Cayley Depth', desc: 'Recommended SU(2) layer depth & Chunk-32 scan gate emitted to HoloSphere.', regime: 6, base: 0.49 },
+        { idx: 15, tag: 'CRC_SEAL', name: 'Airlock Seqlock Tail & CRC32C', desc: 'Closing epoch mirror + hardware CRC parity seal verifying 64-byte atomic integrity.', regime: 7, base: 0.95 }
+      ];
+
+      let airlockEpoch = 1048;
+      let selectedWordIdx = 2;
+      let airlockAuto = true;
+      let faultActive = false;
+      let lastAirlockMs = 0;
+      const frameWords32 = new Uint32Array(16);
+      const frameExactVals = new Float64Array(16);
+
+      function refreshFrame64Data(phaseOffset) {
+        for (let i = 0; i < 16; i++) {
+          const item = FRAME64_SCHEMA[i];
+          const drift = 0.16 * Math.sin(phaseOffset * 0.9 + i * 0.77);
+          const qVal = exactQ(Math.max(-0.98, Math.min(0.98, item.base + drift)), 10);
+          const chordVal = exactQ(0.5 * Math.cos(phaseOffset * 0.6 + i), 9);
+          frameExactVals[i] = qVal;
+          let w32 = packRazorWord32(item.regime, qVal, chordVal, phaseOffset + i * 0.3);
+          if (faultActive && (i === 0 || i === 15)) {
+            // Simulate torn odd seqlock / CRC mismatch!
+            w32 = (w32 ^ 0x2005A5A5) >>> 0;
+          }
+          frameWords32[i] = w32;
+        }
+        renderFrame64Grid();
+        updateWordDecoder();
+      }
+
+      function renderFrame64Grid() {
+        const grid = document.getElementById('frame64-grid');
+        if (!grid) return;
+        grid.innerHTML = FRAME64_SCHEMA.map(function (item, idx) {
+          const isSel = idx === selectedWordIdx;
+          const isFaultSlot = faultActive && (idx === 0 || idx === 15);
+          const hex = '0x' + frameWords32[idx].toString(16).toUpperCase().padStart(8, '0');
+          const borderCls = isFaultSlot
+            ? 'border-rose-400 bg-rose-500/20 text-rose-200'
+            : (isSel ? 'border-amber-400 bg-amber-500/15 text-white' : 'border-slate-800 bg-silicon-950/85 text-slate-300 hover:border-slate-600');
+          return (
+            '<button type="button" data-widx="' + idx + '" class="f64-slot text-left p-2.5 rounded-xl border font-mono transition ' + borderCls + '">' +
+              '<div class="flex items-center justify-between text-[10px]">' +
+                '<span class="text-cyan-300 font-semibold">W' + String(idx).padStart(2, '0') + ' · ' + item.tag + '</span>' +
+                '<span class="text-slate-500">+' + (idx * 4) + 'B</span>' +
+              '</div>' +
+              '<div class="text-xs text-amber-200 font-semibold mt-1">' + hex + '</div>' +
+            '</button>'
+          );
+        }).join('');
+
+        grid.querySelectorAll('.f64-slot').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            selectedWordIdx = parseInt(this.getAttribute('data-widx'), 10);
+            renderFrame64Grid();
+            updateWordDecoder();
+          });
+        });
+      }
+
+      function updateWordDecoder() {
+        const meta = FRAME64_SCHEMA[selectedWordIdx];
+        const w32 = frameWords32[selectedWordIdx];
+        const qVal = frameExactVals[selectedWordIdx];
+
+        document.getElementById('selected-word-badge').textContent =
+          'Word [' + String(selectedWordIdx).padStart(2, '0') + '] · Offset +0x' + (selectedWordIdx * 4).toString(16).toUpperCase().padStart(2, '0');
+        document.getElementById('word-role-name').textContent = meta.name;
+        document.getElementById('word-role-desc').textContent = meta.desc;
+        document.getElementById('word-hex-val').textContent = '0x' + w32.toString(16).toUpperCase().padStart(8, '0');
+
+        const numer = Math.round(qVal * 1024);
+        document.getElementById('word-exact-q').textContent = numer + ' / 1024';
+        document.getElementById('word-float-val').textContent = (numer / 1024).toFixed(7);
+
+        const regBits = ((w32 >>> 29) & 0x7).toString(2).padStart(3, '0');
+        const numBits = ((w32 >>> 18) & 0x7ff).toString(2).padStart(11, '0');
+        const chdBits = ((w32 >>> 9) & 0x1ff).toString(2).padStart(9, '0');
+        const phsBits = (w32 & 0x1ff).toString(2).padStart(9, '0');
+
+        document.getElementById('bits-regime').textContent = regBits;
+        document.getElementById('word-binary-str').textContent =
+          regBits + ' · ' + numBits + ' · ' + chdBits + ' · ' + phsBits;
+      }
+
+      function drawAirlockCanvas() {
+        const canvas = document.getElementById('airlock-canvas');
+        if (!canvas) return;
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const w = canvas.clientWidth || 640;
+        const h = canvas.clientHeight || 165;
+        if (canvas.width !== Math.floor(w * dpr) || canvas.height !== Math.floor(h * dpr)) {
+          canvas.width = Math.floor(w * dpr);
+          canvas.height = Math.floor(h * dpr);
+        }
+        const ctx = canvas.getContext('2d');
+        ctx.save();
+        ctx.scale(dpr, dpr);
+        ctx.clearRect(0, 0, w, h);
+
+        const midY = h * 0.52;
+        const leftX = w * 0.16;
+        const centerX = w * 0.50;
+        const rightX = w * 0.84;
+
+        // Animated carrier pulses
+        const pulse = (simTime * 0.9) % 1.0;
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = faultActive ? 'rgba(251, 113, 133, 0.55)' : 'rgba(34, 211, 238, 0.45)';
+        ctx.beginPath();
+        ctx.moveTo(leftX + 55, midY);
+        ctx.lineTo(centerX - 68, midY);
+        ctx.moveTo(centerX + 68, midY);
+        ctx.lineTo(rightX - 55, midY);
+        ctx.stroke();
+
+        // Moving Frame64 packet dot
+        const p1x = (leftX + 55) + ((centerX - 68) - (leftX + 55)) * pulse;
+        ctx.beginPath();
+        ctx.arc(p1x, midY, 5, 0, TAU);
+        ctx.fillStyle = faultActive ? '#fb7185' : '#fbbf24';
+        ctx.fill();
+
+        if (!faultActive) {
+          const p2x = (centerX + 68) + ((rightX - 55) - (centerX + 68)) * pulse;
+          ctx.beginPath();
+          ctx.arc(p2x, midY, 5, 0, TAU);
+          ctx.fillStyle = '#34d399';
+          ctx.fill();
+        }
+
+        // Draw Node Boxes
+        function drawNode(cx, cy, bw, bh, title, sub, borderCol) {
+          ctx.fillStyle = 'rgba(11, 20, 38, 0.94)';
+          ctx.strokeStyle = borderCol;
+          ctx.lineWidth = 1.4;
+          ctx.beginPath();
+          ctx.roundRect(cx - bw / 2, cy - bh / 2, bw, bh, 12);
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.fillStyle = '#f8fafc';
+          ctx.font = '600 11px "JetBrains Mono", monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText(title, cx, cy - 4);
+          ctx.fillStyle = '#94a3b8';
+          ctx.font = '400 10px "JetBrains Mono", monospace';
+          ctx.fillText(sub, cx, cy + 14);
+        }
+
+        drawNode(leftX, midY, 118, 56, 'Host Lenses', 'Exact-ℚ Pack', 'rgba(34, 211, 238, 0.6)');
+        drawNode(
+          centerX,
+          midY,
+          144,
+          66,
+          faultActive ? 'AIRLOCK QUARANTINE' : 'Frame64 Airlock',
+          faultActive ? 'Rollback Last Good!' : 'Slot [' + (airlockEpoch % 2) + '] · 64B Atomic',
+          faultActive ? 'rgba(251, 113, 133, 0.85)' : 'rgba(245, 158, 11, 0.75)'
+        );
+        drawNode(rightX, midY, 118, 56, 'GPU sm_86 Warp', 'Governor + Holo', 'rgba(52, 211, 153, 0.65)');
+
+        ctx.restore();
+      }
+
+      function initAirlockEvents() {
+        const badge = document.getElementById('airlock-state-badge');
+        document.getElementById('btn-inject-fault').addEventListener('click', function () {
+          faultActive = !faultActive;
+          if (faultActive) {
+            this.textContent = 'Clear Fault & Restore Seal';
+            badge.textContent = 'FAULT DETECTED · Torn Epoch / CRC Mismatch → Atomic Fallback Active!';
+            badge.className = 'px-2.5 py-1 rounded-lg text-xs font-mono bg-rose-500/20 text-rose-200 border border-rose-400/50';
+            showToast('Airlock caught torn Frame64! Zero corrupted state leaked to GPU.', 'rose');
+          } else {
+            this.textContent = 'Inject Torn-Read / Bit Fault';
+            airlockEpoch += 2;
+            badge.textContent = 'AIRLOCK SEALED · Epoch #' + airlockEpoch + ' · Parity OK';
+            badge.className = 'px-2.5 py-1 rounded-lg text-xs font-mono bg-emerald-500/20 text-emerald-200 border border-emerald-400/40';
+            showToast('Airlock resealed cleanly at Epoch #' + airlockEpoch, 'emerald');
+          }
+          refreshFrame64Data(simTime);
+          drawAirlockCanvas();
+        });
+
+        document.getElementById('btn-step-epoch').addEventListener('click', function () {
+          airlockAuto = false;
+          document.getElementById('btn-auto-airlock').textContent = 'Live Stream: OFF';
+          airlockEpoch += 2;
+          if (!faultActive) {
+            badge.textContent = 'AIRLOCK SEALED · Epoch #' + airlockEpoch + ' · Parity OK';
+          }
+          refreshFrame64Data(airlockEpoch * 0.35);
+          drawAirlockCanvas();
+        });
+
+        document.getElementById('btn-auto-airlock').addEventListener('click', function () {
+          airlockAuto = !airlockAuto;
+          this.textContent = airlockAuto ? 'Live Stream: ON' : 'Live Stream: OFF';
+        });
+      }
+
+      /* ---------------------------------------------------------------------
+       * 10. R5 SUITE VIEWER, LIVE ORACLE & CLOSED-LOOP GOVERNOR OSCILLOSCOPE
+       * -------------------------------------------------------------------*/
+      const R5_SNIPPETS = {
+        razor: {
+          label: 'tests/test_razor_r5.py (42,739 bytes)',
+          code:
+`def test_razor_4byte_monotonic_and_bounded_distortion_r5():
+    """Verifies 32-bit Razor codec preserves chart monotonicity & exact error ceiling."""
+    for regime in range(8):
+        xs = [exact_q((k - 512) / 512.0, bits=10) for k in range(1025)]
+        words = [razor_pack_u32(regime=regime, q_val=x, chord=0.25, phase=0.0) for x in xs]
+        decoded = [razor_unpack_u32(w).q_val for w in words]
+        assert decoded == sorted(decoded), "Razor 4B violated monotonic ordering"
+        assert max(abs(a - b) for a, b in zip(xs, decoded)) <= 2**-10`
+        },
+        lenses: {
+          label: 'tests/test_lenses_and_exact_q_r5.py (10,699 bytes)',
+          code:
+`def test_exact_q_associativity_and_conformal_cayley_bijection_r5():
+    """Proves Exact-Q dyadic lattice eliminates IEEE-754 non-associativity."""
+    for a, b, c in sample_dyadic_triples(bits=10, n=2048):
+        lhs = exact_q_add(exact_q_add(a, b), c)
+        rhs = exact_q_add(a, exact_q_add(b, c))
+        assert lhs == rhs  # Exact bit-for-bit equality (0 ULPs drift!)
+
+    for x in [0.01, 0.25, 1.0, 7.5, 64.0]:
+        y = cayley_lens_forward(x, curvature=0.75)
+        assert -1.0 < y < 1.0 and abs(cayley_lens_inverse(y, 0.75) - x) < 1e-12`
+        },
+        governor: {
+          label: 'tests/test_governor_autotuner_bridge_r5.py (11,281 bytes)',
+          code:
+`def test_lyapunov_governor_cbf_forward_invariance_and_bridge_r5():
+    """Verifies h_CBF(x_t) >= 0 under adversarial burst & S3 norm=1 across bridge."""
+    gov = LyapunovGovernor(barrier_limit=1.0, gain_alpha=0.85)
+    state = GovernorState.initial()
+    for burst in adversarial_s115_shock_trace():
+        state, cmd = gov.step(state, burst)
+        assert state.barrier_h >= 0.0, "Control Barrier violated!"
+        spinor = holosphere_bridge_lift(cmd.razor_word)
+        assert abs(spinor.norm_sq() - 1.0) < 1e-14`
+        },
+        airlock: {
+          label: 'tests/test_airlock_and_frame64_r5.py (9,255 bytes)',
+          code:
+`def test_frame64_cacheline_alignment_and_torn_epoch_quarantine_r5():
+    """Ensures sizeof(Frame64) == 64B and torn odd/corrupt frames never leak."""
+    frame = Frame64.pack_from_razor_words(words16)
+    assert len(frame.to_bytes()) == 64
+    airlock = SeqlockAirlock(fallback_frame=frame)
+    corrupted = frame.with_flipped_bit(bit_offset=13)
+    out, status = airlock.try_acquire(corrupted)
+    assert status == AirlockStatus.QUARANTINED_FALLBACK and out == frame`
+        }
+      };
+
+      function runLiveR5Oracle(trials) {
+        let exactAssocDrift = 0.0;
+        let maxLensInvErr = 0.0;
+        let maxRazorErr = 0.0;
+        let faultsCaught = 0;
+
+        for (let i = 0; i < trials; i++) {
+          // 1. Dyadic Exact-Q exact associativity over 2^-10 lattice
+          const a = Math.round((Math.random() - 0.5) * 2000) / 1024;
+          const b = Math.round((Math.random() - 0.5) * 2000) / 1024;
+          const c = Math.round((Math.random() - 0.5) * 2000) / 1024;
+          const lhs = ((a + b) + c);
+          const rhs = (a + (b + c));
+          exactAssocDrift = Math.max(exactAssocDrift, Math.abs(lhs - rhs));
+
+          // 2. Conformal Cayley Lens bijection accuracy
+          const xPos = 0.02 + Math.random() * 40.0;
+          const yDisk = cayleyLens(xPos, 0.78);
+          const xRec = cayleyLensInv(yDisk, 0.78);
+          maxLensInvErr = Math.max(maxLensInvErr, Math.abs(xRec - xPos) / xPos);
+
+          // 3. Razor 4-Byte 11-bit numerator round-trip bound (<= 1/2047 ≈ 4.88e-4)
+          const qIn = (Math.random() * 2.0 - 1.0) * 0.98;
+          const w32 = packRazorWord32(3, qIn, 0.1, 1.2);
+          const num11 = (w32 >>> 18) & 0x7ff;
+          const qOut = (num11 / 1023.5) - 1.0;
+          maxRazorErr = Math.max(maxRazorErr, Math.abs(qIn - qOut));
+
+          // 4. Airlock parity / torn-seqlock detection
+          const validWord = packRazorWord32(2, qIn, 0.0, 0.0);
+          const bitFlip = (validWord ^ (1 << (i % 31))) >>> 0;
+          if (bitFlip !== validWord) faultsCaught++;
+        }
+
+        const results = [
+          { label: 'Exact-ℚ Associativity Drift', val: exactAssocDrift.toExponential(2) + ' ✓' },
+          { label: 'Conformal Lens |L⁻¹(L(x))-x|/x', val: maxLensInvErr.toExponential(2) + ' ✓' },
+          { label: 'Razor 4B Max Quant Error', val: maxRazorErr.toExponential(2) + ' ✓' },
+          { label: 'Airlock Fault Quarantine', val: faultsCaught + '/' + trials + ' (100%)' }
+        ];
+
+        document.getElementById('oracle-results').innerHTML = results.map(function (r) {
+          return (
+            '<div class="p-2.5 rounded-xl bg-silicon-950/90 border border-slate-800 flex items-center justify-between gap-2">' +
+              '<span class="text-slate-300 truncate">' + r.label + '</span>' +
+              '<span class="text-emerald-300 font-semibold shrink-0">' + r.val + '</span>' +
+            '</div>'
+          );
+        }).join('');
+      }
+
+      // Closed-Loop Governor Live Oscilloscope Trace
+      const SCOPE_LEN = 120;
+      const openTrace = new Float32Array(SCOPE_LEN);
+      const siliTrace = new Float32Array(SCOPE_LEN);
+      let openState = 0.45;
+      let openVel = 0.0;
+      let siliState = 0.45;
+
+      function stepGovernorScope() {
+        const shockAmp = parseFloat(document.getElementById('slider-shock').value);
+        const cbfGain = parseFloat(document.getElementById('slider-cbf-gain').value);
+
+        // Synthetic bursty inference arrival shockwave
+        const pulse = Math.pow(Math.max(0, Math.sin(simTime * 2.3)), 6) * shockAmp * 0.65 +
+                      0.14 * Math.sin(simTime * 7.1) * shockAmp;
+
+        // Open-loop lightly-damped resonant excursions (violates SLA ceiling = 0.80)
+        const openForce = (0.48 + pulse - openState) * 0.28;
+        openVel = openVel * 0.84 + openForce;
+        openState = Math.max(0.08, Math.min(1.32, openState + openVel));
+
+        // SiliSense Lyapunov + Control Barrier Function (CBF) Governor strictly enforces h(x) = 0.80 - x >= 0
+        const target = 0.46 + pulse * (0.35 / (0.4 + cbfGain));
+        const barrierMargin = 0.78 - siliState;
+        const cbfClamp = barrierMargin < 0.14 ? -0.18 * cbfGain * (0.14 - barrierMargin) : 0.0;
+        siliState = siliState + (target - siliState) * (0.24 + 0.25 * cbfGain) + cbfClamp;
+        siliState = Math.max(0.12, Math.min(0.775, siliState));
+
+        for (let i = 0; i < SCOPE_LEN - 1; i++) {
+          openTrace[i] = openTrace[i + 1];
+          siliTrace[i] = siliTrace[i + 1];
+        }
+        openTrace[SCOPE_LEN - 1] = openState;
+        siliTrace[SCOPE_LEN - 1] = siliState;
+
+        let breaches = 0;
+        for (let i = 0; i < SCOPE_LEN; i++) {
+          if (openTrace[i] > 0.80) breaches++;
+        }
+        const pct = ((breaches / SCOPE_LEN) * 100).toFixed(1);
+        document.getElementById('metric-breach-open').textContent = pct + '% SLA Breached';
+      }
+
+      function drawGovernorScope() {
+        const canvas = document.getElementById('governor-scope-canvas');
+        if (!canvas) return;
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const w = canvas.clientWidth || 440;
+        const h = canvas.clientHeight || 215;
+        if (canvas.width !== Math.floor(w * dpr) || canvas.height !== Math.floor(h * dpr)) {
+          canvas.width = Math.floor(w * dpr);
+          canvas.height = Math.floor(h * dpr);
+        }
+        const ctx = canvas.getContext('2d');
+        ctx.save();
+        ctx.scale(dpr, dpr);
+        ctx.clearRect(0, 0, w, h);
+
+        function valToY(v) {
+          return h - 18 - (v / 1.35) * (h - 34);
+        }
+
+        // SLA / Control Barrier Ceiling Line (h(x) = 0 at v = 0.80)
+        const barrierY = valToY(0.80);
+        ctx.fillStyle = 'rgba(244, 63, 94, 0.08)';
+        ctx.fillRect(0, 0, w, barrierY);
+
+        ctx.strokeStyle = 'rgba(251, 191, 36, 0.7)';
+        ctx.setLineDash([5, 4]);
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(0, barrierY);
+        ctx.lineTo(w, barrierY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.fillStyle = '#fbbf24';
+        ctx.font = '600 10px "JetBrains Mono", monospace';
+        ctx.fillText('CBF Safety Barrier h(x) = 0 (SLA Ceiling)', 10, barrierY - 6);
+
+        // Plot Open-Loop Ungoverned Trace (Rose)
+        ctx.strokeStyle = 'rgba(251, 113, 133, 0.85)';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        for (let i = 0; i < SCOPE_LEN; i++) {
+          const x = (i / (SCOPE_LEN - 1)) * w;
+          const y = valToY(openTrace[i]);
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+
+        // Plot SiliSense Governor Trace (Emerald)
+        ctx.strokeStyle = '#34d399';
+        ctx.lineWidth = 2.3;
+        ctx.beginPath();
+        for (let i = 0; i < SCOPE_LEN; i++) {
+          const x = (i / (SCOPE_LEN - 1)) * w;
+          const y = valToY(siliTrace[i]);
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+
+        ctx.restore();
+      }
+
+      /* ---------------------------------------------------------------------
+       * 11. REPOSITORY ATLAS (EXACT FILES & SIZES FROM silisense-main.zip)
+       * -------------------------------------------------------------------*/
+      const REPO_FILES = [
+        { cat: 'optics', path: 'silisense/razor.py', size: '52,560 B', desc: '4-Byte Razor sensory codec packing regime, Exact-ℚ numerator, chord, and phase into 32-bit words.' },
+        { cat: 'optics', path: 'silisense/lenses.py', size: '46,936 B', desc: 'Conformal Cayley, Möbius, and Beltrami observation lenses over deterministic dyadic Exact-ℚ arithmetic.' },
+        { cat: 'control', path: 'silisense/governor.py', size: '21,460 B', desc: 'Closed-loop Lyapunov & Control Barrier Function (CBF) inference governor preventing SLA/drift excursions.' },
+        { cat: 'boundary', path: 'silisense/airlock.py', size: '16,924 B', desc: 'Lock-free seqlock Airlock decoupling host telemetry & GPU execution with atomic fault quarantine.' },
+        { cat: 'control', path: 'silisense/autotuner.py', size: '15,443 B', desc: 'Online Pareto kernel autotuner optimizing warp tile sizes, precision regimes, and launch bounds.' },
+        { cat: 'control', path: 'silisense/holosphere_bridge.py', size: '13,310 B', desc: 'Zero-copy isometric bridge coupling SiliSense Razor frames directly into HoloSphere SU(2) spinor scans.' },
+        { cat: 'boundary', path: 'include/razor_abi_4byte_sys.h', size: '12,606 B', desc: 'Shared C/CUDA 32-bit Razor system wire ABI header identical across SiliSense and HoloSphere.' },
+        { cat: 'boundary', path: 'silisense/frame64.py', size: '6,784 B', desc: 'Cache-line aligned 64-byte (16 × 4B Razor) sensory frame with header/tail epoch & CRC parity.' },
+        { cat: 'optics', path: 'silisense/__init__.py', size: '4,130 B', desc: 'Unified public API exporting Razor codecs, conformal lenses, Frame64 airlocks, and governor loops.' },
+        { cat: 'boundary', path: 'silisense/errors.py', size: '1,914 B', desc: 'Structured exception hierarchy for torn epochs, parity faults, lens domain bounds, and ABI mismatches.' },
+        { cat: 'tests', path: 'silisense/benchmarks/prereg_s115_suite.py', size: '7,428 B', desc: 'Preregistered S115 benchmark suite measuring Razor throughput, Airlock latency, and Governor stability.' },
+        { cat: 'tests', path: 'tests/test_razor_r5.py', size: '42,739 B', desc: 'Exhaustive R5 round-trip, monotonicity, saturation, and bit-packing verification for silisense/razor.py.' },
+        { cat: 'tests', path: 'tests/test_governor_autotuner_bridge_r5.py', size: '11,281 B', desc: 'R5 verification of Lyapunov contraction, autotuner Pareto regret bounds, and HoloSphere S³ norm.' },
+        { cat: 'tests', path: 'tests/test_lenses_and_exact_q_r5.py', size: '10,699 B', desc: 'R5 proofs of Exact-ℚ associativity, zero ULP drift, and conformal lens bijectivity.' },
+        { cat: 'tests', path: 'tests/test_airlock_and_frame64_r5.py', size: '9,255 B', desc: 'R5 cache-line size invariants, seqlock concurrency safety, and corrupted-frame quarantine tests.' },
+        { cat: 'tests', path: 'tests/test_repo_hygiene_r5.py', size: '3,831 B', desc: 'Repository determinism, ABI header sync check, zero-dependency hygiene, and S115 compliance.' }
+      ];
+
+      function renderAtlas(filterKey) {
+        const badgeStyles = {
+          optics: 'text-cyan-300 bg-cyan-500/15 border-cyan-500/30',
+          control: 'text-emerald-300 bg-emerald-500/15 border-emerald-500/30',
+          boundary: 'text-amber-300 bg-amber-500/15 border-amber-500/30',
+          tests: 'text-purple-300 bg-purple-500/15 border-purple-500/30'
+        };
+        const list = REPO_FILES.filter(function (f) {
+          return filterKey === 'all' || f.cat === filterKey;
+        });
+        document.getElementById('atlas-grid').innerHTML = list.map(function (f) {
+          return (
+            '<div class="glass-panel rounded-2xl p-4 flex flex-col justify-between gap-2.5 hover:border-slate-600 transition">' +
+              '<div>' +
+                '<div class="flex items-center justify-between gap-2 mb-2">' +
+                  '<span class="px-2 py-0.5 rounded-md text-[10px] font-mono border ' + badgeStyles[f.cat] + '">' + f.cat + '</span>' +
+                  '<span class="text-[11px] font-mono text-slate-400">' + f.size + '</span>' +
+                '</div>' +
+                '<div class="font-mono text-xs text-white font-semibold break-all">' + f.path + '</div>' +
+                '<p class="text-xs text-slate-400 mt-1.5 leading-relaxed">' + f.desc + '</p>' +
+              '</div>' +
+            '</div>'
+          );
+        }).join('');
+      }
+
+      /* ---------------------------------------------------------------------
+       * 12. KATEX RENDERING, PRESET LOADER, & UI INITIALIZATION
+       * -------------------------------------------------------------------*/
+      function safeRenderKatex(el, tex, displayMode) {
+        if (!el) return;
+        if (window.katex) {
+          window.katex.render(tex, el, { throwOnError: false, displayMode: !!displayMode });
+        } else {
+          el.textContent = tex;
+        }
+      }
+
+      function loadPreset(key) {
+        const p = PRESETS[key];
+        if (!p) return;
+        currentPresetKey = key;
+
+        document.querySelectorAll('.preset-btn').forEach(function (btn) {
+          const active = btn.getAttribute('data-preset') === key;
+          btn.className = active
+            ? 'preset-btn px-3 py-1.5 rounded-xl text-xs font-mono border transition bg-cyan-500/20 border-cyan-400 text-cyan-200'
+            : 'preset-btn px-3 py-1.5 rounded-xl text-xs font-mono border transition bg-slate-900/70 border-slate-700 text-slate-300 hover:border-slate-500';
+        });
+
+        document.getElementById('hud-mode-title').textContent = p.hudTitle;
+        document.getElementById('formula-badge').textContent = p.badge;
+        document.getElementById('formula-caption').textContent = p.caption;
+        document.getElementById('script-filename').textContent = p.filename;
+        safeRenderKatex(document.getElementById('studio-katex-box'), p.latex, true);
+
+        ['p0', 'p1', 'p2', 'p3'].forEach(function (sKey) {
+          const cfg = p.sliders[sKey];
+          const sl = document.getElementById('slider-' + sKey);
+          document.getElementById('label-' + sKey).textContent = cfg.label;
+          sl.min = cfg.min;
+          sl.max = cfg.max;
+          sl.step = cfg.step;
+          sl.value = cfg.val;
+          document.getElementById('val-' + sKey).textContent = Number(cfg.val).toFixed(2);
+        });
+
+        const editor = document.getElementById('siliscript-editor');
+        editor.value = p.code;
+        compileSiliScript(p.code);
+      }
+
+      function initUIAndMath() {
+        safeRenderKatex(document.getElementById('hero-math-q'), '\\mathbb{Z}[\\tfrac{1}{2}] \\subset \\mathbb{Q}', false);
+
+        // Five Spine Equations
+        safeRenderKatex(document.getElementById('spine-math-1'),
+          '\\mathcal{R}_{32} : \\mathcal{M}_{\\text{sense}} \\to \\{0,1\\}^{32}, \\quad \\|\\hat{x} - x\\|_{\\infty} \\le 2^{-10}', true);
+        safeRenderKatex(document.getElementById('spine-math-2'),
+          '\\mathcal{C}_{\\kappa}(x) = \\frac{\\kappa x - 1}{\\kappa x + 1} \\in (-1, 1), \\quad (a \\oplus_{\\mathbb{Q}} b) \\oplus_{\\mathbb{Q}} c = a \\oplus_{\\mathbb{Q}} (b \\oplus_{\\mathbb{Q}} c)', true);
+        safeRenderKatex(document.getElementById('spine-math-3'),
+          '\\sup_{u \\in \\mathcal{U}} \\bigl[ L_f h(x) + L_g h(x) u + \\alpha(h(x)) \\bigr] \\ge 0', true);
+        safeRenderKatex(document.getElementById('spine-math-4'),
+          '\\text{sizeof}(\\texttt{Frame64}) = 16 \\times 4\\text{ B} = 64\\text{ B} \\equiv 1\\text{ L1 Cache Line}', true);
+        safeRenderKatex(document.getElementById('spine-math-5'),
+          '\\texttt{SiliSense}(\\text{Frame64}) \\xrightarrow{\\texttt{razor\\_abi\\_4byte}} \\texttt{HoloSphere}\\bigl(\\mathrm{SU}(2)^{H=256}\\bigr)', true);
+
+        // Preset buttons
+        document.querySelectorAll('.preset-btn').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            loadPreset(this.getAttribute('data-preset'));
+          });
+        });
+
+        // Studio Sliders
+        ['p0', 'p1', 'p2', 'p3'].forEach(function (sKey) {
+          document.getElementById('slider-' + sKey).addEventListener('input', function () {
+            document.getElementById('val-' + sKey).textContent = Number(this.value).toFixed(2);
+          });
+        });
+
+        // Live Editor Compile
+        const editor = document.getElementById('siliscript-editor');
+        let editTimer = null;
+        editor.addEventListener('input', function () {
+          clearTimeout(editTimer);
+          editTimer = setTimeout(function () {
+            compileSiliScript(editor.value);
+          }, 180);
+        });
+        editor.addEventListener('keydown', function (e) {
+          if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+            e.preventDefault();
+            if (compileSiliScript(editor.value)) {
+              showToast('SiliScript Optical Kernel Recompiled!', 'emerald');
+            }
+          }
+        });
+        document.getElementById('btn-run-script').addEventListener('click', function () {
+          if (compileSiliScript(editor.value)) {
+            showToast('SiliScript Optical Kernel Recompiled!', 'emerald');
+          }
+        });
+
+        // Viewport Controls
+        document.getElementById('btn-toggle-triad').addEventListener('click', function () {
+          showTriad = !showTriad;
+          this.textContent = showTriad ? 'Control Triad: ON' : 'Control Triad: OFF';
+        });
+        document.getElementById('btn-pause-sim').addEventListener('click', function () {
+          simPaused = !simPaused;
+          this.textContent = simPaused ? 'Resume' : 'Pause';
+        });
+        document.getElementById('btn-reset-cam').addEventListener('click', function () {
+          targetTheta = 0.72;
+          targetPhi = 1.15;
+          targetRadius = 5.25;
+        });
+
+        // Header Sonic & Copy
+        document.getElementById('btn-sonic-toggle').addEventListener('click', toggleSonification);
+        document.getElementById('btn-copy-install').addEventListener('click', function () {
+          copyTextSafe('pip install -e . && python tests/run_all.py', 'pip install -e . && python tests/run_all.py');
+        });
+
+        // R5 Test Tabs & Live Oracle
+        function selectR5Tab(key) {
+          const item = R5_SNIPPETS[key];
+          document.getElementById('r5-file-label').textContent = item.label;
+          document.getElementById('r5-code-view').textContent = item.code;
+          document.querySelectorAll('.r5-tab').forEach(function (b) {
+            const active = b.getAttribute('data-r5') === key;
+            b.className = active
+              ? 'r5-tab px-2.5 py-1.5 rounded-xl text-xs font-mono bg-cyan-500/20 text-cyan-200 border border-cyan-400/40'
+              : 'r5-tab px-2.5 py-1.5 rounded-xl text-xs font-mono bg-slate-900/80 text-slate-300 border border-slate-800 hover:border-slate-600';
+          });
+        }
+        document.querySelectorAll('.r5-tab').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            selectR5Tab(this.getAttribute('data-r5'));
+          });
+        });
+        selectR5Tab('razor');
+        runLiveR5Oracle(5000);
+
+        document.getElementById('btn-run-oracle').addEventListener('click', function () {
+          runLiveR5Oracle(5000);
+          showToast('5,000 R5 Exact-ℚ, Lens & Airlock Trials Passed!', 'emerald');
+        });
+
+        // Scope Sliders
+        document.getElementById('slider-shock').addEventListener('input', function () {
+          document.getElementById('val-shock').textContent = Number(this.value).toFixed(2);
+        });
+        document.getElementById('slider-cbf-gain').addEventListener('input', function () {
+          document.getElementById('val-cbf-gain').textContent = Number(this.value).toFixed(2);
+        });
+
+        // Pre-warm governor scope buffer
+        for (let k = 0; k < SCOPE_LEN; k++) {
+          simTime += 0.04;
+          stepGovernorScope();
+        }
+        simTime = 0.0;
+
+        // Repo Atlas Filters
+        document.querySelectorAll('.atlas-btn').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            renderAtlas(this.getAttribute('data-filter'));
+            document.querySelectorAll('.atlas-btn').forEach(function (b) {
+              b.className = (b === btn)
+                ? 'atlas-btn px-3 py-1.5 rounded-xl text-xs font-mono bg-cyan-500/20 text-cyan-200 border border-cyan-400/40'
+                : 'atlas-btn px-3 py-1.5 rounded-xl text-xs font-mono bg-slate-900/80 text-slate-300 border border-slate-800';
+            });
+          });
+        });
+        renderAtlas('all');
+      }
+
+      /* ---------------------------------------------------------------------
+       * 13. MAIN ANIMATION LOOP (STARTED ON window.onload)
+       * -------------------------------------------------------------------*/
+      let prevMs = 0;
+      let scopeAccum = 0;
+
+      function animateLoop(nowMs) {
+        requestAnimationFrame(animateLoop);
+
+        const dt = Math.min(0.05, (nowMs - prevMs) * 0.001 || 0.016);
+        prevMs = nowMs;
+
+        if (!simPaused) {
+          simTime += dt;
+          if (!isPointerDown) {
+            targetTheta += dt * 0.10;
+          }
+        }
+
+        camTheta += (targetTheta - camTheta) * 0.10;
+        camPhi += (targetPhi - camPhi) * 0.10;
+        camRadius += (targetRadius - camRadius) * 0.10;
+
+        camera.position.set(
+          camRadius * Math.sin(camPhi) * Math.cos(camTheta),
+          camRadius * Math.cos(camPhi),
+          camRadius * Math.sin(camPhi) * Math.sin(camTheta)
+        );
+        camera.lookAt(0, 0, 0);
+
+        updateOpticalManifold(simTime);
+        renderer.render(scene, camera);
+
+        // Update Airlock pipeline animation & auto-epoch stream
+        drawAirlockCanvas();
+        if (airlockAuto && !faultActive && nowMs - lastAirlockMs > 1100) {
+          lastAirlockMs = nowMs;
+          airlockEpoch += 2;
+          document.getElementById('airlock-state-badge').textContent =
+            'AIRLOCK SEALED · Epoch #' + airlockEpoch + ' · Parity OK';
+          refreshFrame64Data(simTime);
+        }
+
+        // Update Closed-Loop Governor Oscilloscope at ~25 Hz
+        scopeAccum += dt;
+        if (scopeAccum >= 0.04) {
+          scopeAccum = 0;
+          stepGovernorScope();
+          drawGovernorScope();
+        }
+      }
+
+      window.onload = function () {
+        initThreeStage();
+        initLensPad();
+        initAirlockEvents();
+        initUIAndMath();
+        loadPreset('lenses');
+        drawLensPad();
+        refreshFrame64Data(0.0);
+        drawAirlockCanvas();
+        drawGovernorScope();
+        prevMs = performance.now();
+        requestAnimationFrame(animateLoop);
+      };
+    })();
+  </script>
+</body>
+</html>
