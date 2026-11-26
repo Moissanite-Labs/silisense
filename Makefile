@@ -25,6 +25,8 @@ bench-cpu:
 
 audit-hygiene:
 	CUDA_VISIBLE_DEVICES="" PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I -B tests/test_repo_hygiene_r5.py -v
+	CUDA_VISIBLE_DEVICES="" PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I -B silisense/readme_pins.py
+	CUDA_VISIBLE_DEVICES="" PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I -B tests/test_readme_receipt_pins_r5.py -v
 
 clean:
 	rm -rf build dist *.egg-info
