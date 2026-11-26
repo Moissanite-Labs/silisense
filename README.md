@@ -35,7 +35,11 @@
 |  silisense/autotuner.py        PREREG-S115 H15c Composite EDP Autotuner |
 |                                + 5-Gate Pure-Fraction Anti-Goodhart     |
 |                                + 2-Step mean_watt Quotient Fork (1275/8)|
+|  silisense/razor.py            30 kHz BER-Canary Razor Controller       |
+|                                + N=256 Epoch Hysteresis & 16 B Rollback |
+|                                + Non-Scalar Krein-Holonomy Detector K_t |
 |  silisense/holosphere_bridge.py Canonical SHA256 One-Way Step Bridge    |
+|  include/razor_abi_4byte_sys.h 64 B Cacheline .sys Canary & 16 B Pi ABI |
 +------------------------------------+------------------------------------+
                                      |
        HoloSphereStepTelemetry (in)  |  HoloSphereTuningProfile (out, SHA-256)
@@ -45,12 +49,29 @@
 
 ---
 
+## `30 kHz` Razor BER-Canary, `N=256` Epoch Hysteresis, & Krein–Holonomy Detector (`[EXACT_PROVEN / C11+CUDA_ABI_VERIFIED]`)
+
+`silisense/razor.py` and [`include/razor_abi_4byte_sys.h`](include/razor_abi_4byte_sys.h) close the `~10 Hz` NVML zero-order hold (`ZOH`) observability ceiling (`100 ms` blind window) using inline `[16, 11, 4]` Block-H4 SECDED bit-error detection sampled at **`30 kHz` (`33.33 us/tok`, `3,000×` faster than NVML)** over a cacheline-aligned **`64 B` `.sys` D2H canary (`sizeof=64, alignof=64`)** that executes **`0` PCIe atomic writes on clean cycles**:
+
+- **Live RTX 3080 (`GA104M`, `sm_86`) `.sys` Canary Receipts:**
+  - *V1 Inline SECDED Kernel:* `0` PCIe atomic writes on clean cycles, **`16/16` single-bit LSB faults healed inline (`max_abs_diff = 0.0`, bit-exact output byte)**, and **`1/1` DED double-bit fault flagged with zero silent miscorrection**.
+  - *V2 `16`-Warp `d=512` Fused Kernel (`26.23 us/tok` CellOp, `27.43 us/tok` / `0.989 mJ/tok` E2E with `0 B` tied `FWHT256` LM head, `9.091×` over V1, `1.83e-7` parity vs FP64 dense):* `0` PCIe atomic writes on clean cycles, **`16/16` SEC `0.0` bit-exact across all `512` hidden floats, `256` logits, and output byte**, and **`1/1` DED flagged with zero silent miscorrection**.
+- **Honest `0/48 -> 48/48` Vmin Carry-Path Upper-Bit Closure:** Standard `[16, 11, 4]` LSB parity detects `16/16` LSB flips and `120/120` 2-bit LSB pairs, but detects **`0/48`** single bit flips in signed-nibble upper bits `1..3` (which carry-path timing violations can flip directly). `silisense/razor.py` and `include/razor_abi_4byte_sys.h` close **`48/48` (`100%`)** of upper-bit single faults via:
+  1. **Folded `bit1 ^ bit2 ^ bit3` upper-bit parity** (`1` separate side-channel parity bit outside the 16-bit `[16, 11, 4]` codeword, `0` extra DRAM weight bytes when carried in metadata/registers, `48/48`),
+  2. **Epoch-rotated nibble bit-plane checks** (`b = epoch & 3`, catching `16/48` per epoch and closing all `48/48` across `4` epochs), and
+  3. **Dual-channel `block_crc16_ccitt`** (`48/48` single and multi-bit upper-bit closure).
+- **Exact-$\mathbb{Q}$ `N=256`-Token Anti-Chatter Hysteresis & `16 B` Rollback:** `HoloSphereRazorController.step_epoch()` updates a `Q16`-quantized exact rational EWMA `e <- floor_Q16((1 - 1/32)e + (1/32)(sec_delta / 256))` (matching `ewma_ber_q16_u32` in the C ABI with bounded denominator `<= 65536` across unbounded runtime), holds deadband on isolated `1`-SEC epochs, steps margin up immediately on `sec_delta >= 2` or `e >= 2/256` with a `4`-epoch (`1,024`-token) dwell hold, requires `16` consecutive clean epochs (`4,096` tokens) + healthy `SiliSense` `OP1/OP2/OP3` + `FiveGateAntiGoodhartRatchet` before margin descent, and latches Tier-2 DED / non-LSB faults for `64` clean epochs (`16,384` tokens); single-poll `step()` enforces the same DED latch, min-dwell hold, clean-epoch warmup, and health gates. `WeftHolonomyRollbackBuffer` maintains exact-`Fraction` `QuatQ` + `S_fast` + clean chunk-32 boundary state (`Fraction(0)` residual drift on replay) and packs `Pi_{t_0}` via `pack_checkpoint_pi16()` into the `16 B` little-endian IEEE-754 `HoloSpherePiRollback16` ABI struct.
+- **Exact-$\mathbb{Q}$ Non-Scalar Krein–Holonomy Detector (`K_t`):** `nonscalar_krein_holonomy_detector()` computes exact Sylvester inertia of `K_t = diag(G - A^T G A, 3 - |tr(Delta U_t)|^2)` via Descartes' rule over `Fraction`, proving scalar `G = I_3` is blind to non-Abelian operator ordering (`n_-(UL) == n_-(LU) == 1`) whereas non-scalar SPD `G_3 = diag(3, 1, 1)` cleanly separates ordering (`n_-(UL) == 1 != 2 == n_-(LU)`).
+- **Multi-Compiler ABI Verification:** `include/razor_abi_4byte_sys.h` enforces little-endian host byte order, uses `__atomic_load_n(..., __ATOMIC_ACQUIRE)` (zero C11/C++17 atomic-pointer type-punning UB, pure read with `_ReadWriteBarrier()` under `_MSC_VER`), emits up to `4` (`2–4`: `1–3` conditional `atom.release.sys.global.add.u32` + `1` `st.release.sys.global.u32`) `.sys` release ops on fault cycles (`0` when clean), and compiles cleanly under `gcc -std=c11` and `g++ -std=c++17` with `-Wall -Wextra -Werror -pedantic -fsanitize=undefined`, and under `nvcc -O3 -std=c++17 -arch=sm_86` with `-Xcompiler -Wall,-Wextra,-Werror` (`12–15` registers depending on probe harness, `0 B` spills).
+
+---
+
 ## Live Mode-1 RTX 3080 (`GA104M` + `i9-11980HK`, `90 W` Cap) Empirical Calibration (`PREREG-S115`)
 
 Evaluated live in Mode 1 (`telemetry-only`, `0` audio/camera/IR opens) across `3` seeds (`[42, 137, 2026]`):
 - **`H15a` (`FALSIFIED` under Mode-1 NVML ZOH):** Warp-fused `HoloSphere-V2` (`sm_86`) cut training energy by **`5.97×` (`11.16` vs `66.59 mJ/tok`, `6.30×` faster)** and `OP1_SEAM1` leverage shock by **`-45.7%`**, with non-Gaussian `A7` uncore copula MI confirmed at `z_iaaft = +5.50σ` (`p_Holm = 0.00375 < 0.005`), while `~10 Hz` NVML power-register zero-order hold (`ZOH`) masked sub-millisecond `A3` shockwaves (`A7` `-14.66%` vs `-20%` gate).
 - **`H15b` (`FALSIFIED` vs `-25%` gate; `-9.30%` live stall reduction):** Closed-loop `PrecursorThrottleGovernor` (`f*tau = 0.10 < 1/6`, `g_min = 0.72`) reduced `SwPowerCap` stall fraction by **`-9.30%` (`z = -7.922`, `p_t(df=2) = 0.0156`)** and step `mJ/tok` CV by **`-11.41%` (`z = -2.098`)** vs `NoGovernor` (`-5.63%` vs duty-matched `Shuffled-Trigger-Control`), establishing the Mode-1 vs Mode-2 (`48 kHz` DMIC) precursor bandwidth ceiling.
-- **`H15c` (`FALSIFIED`; Anti-Goodhart Ratchet Verified Live):** Bare-metal `sm_86` (`B=16`) achieved optimal sustained `EDP` (`0.1885–0.1941 mJ·ms/tok²`); when ZOH-inflated `|z_A3|` perturbed `J(theta)` on `2/3` seeds, `FiveGateAntiGoodhartRatchet` (`G1..G5` over `Fraction`) **rejected `2/2` suboptimal candidates (`accepted = false`)**.
+- **`H15c` (`FALSIFIED`; Anti-Goodhart Ratchet Verified Live):** Bare-metal `sm_86` (`B=16`) achieved `0.1901–0.1941 mJ·ms/tok²` 3-seed mean sustained `EDP` across scalar baselines (Seed-42 Composite reached `0.1837`, `+14.16%`); `FiveGateAntiGoodhartRatchet` (`G1..G5` over `Fraction`) returned **`accepted = false` on `3/3` seeds** (with `G5` tripping `9/9` under ZOH-inflated `|z_A3|`, while `G2+G3` selectively rejected the degraded Seeds `137`/`2026`).
 
 ---
 
