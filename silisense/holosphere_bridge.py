@@ -37,20 +37,6 @@ def _require_int_not_bool(val: Any, name: str, code: str) -> int:
     return int(val)
 
 
-def _require_finite_float(val: Any, name: str, code: str) -> float:
-    require_ok(
-        isinstance(val, (int, float)) and not isinstance(val, bool),
-        code,
-        f"{name} must be numeric, got {type(val).__name__}",
-    )
-    try:
-        fval = float(val)
-    except OverflowError as exc:
-        raise ValueError(code) from exc
-    require_ok(math.isfinite(fval), code, f"{name} must be finite, got {val!r}")
-    return 0.0 if fval == 0.0 else fval
-
-
 def _safe_finite_float(val: Any, name: str, code: str) -> float:
     require_ok(
         isinstance(val, (int, float)) and not isinstance(val, bool),
