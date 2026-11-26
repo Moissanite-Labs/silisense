@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deterministic Pure-Stdlib CPU Preflight & Trace Runner for PREREG-S115."""
+"""Deterministic Pure-Stdlib CPU Synthetic Selftest & Offline Trace Runner."""
 
 from __future__ import annotations
 
@@ -23,7 +23,9 @@ from silisense.autotuner import (
     SiliSenseKernelAutotuner,
     two_step_mean_watt_quotient_fork_witness,
 )
+from silisense.errors import require_ok
 from silisense.governor import (
+    PreAdaptationResidualLatch,
     check_delay_bandwidth_lock,
     simulate_sustained_governor_benchmark,
 )
@@ -33,6 +35,10 @@ from silisense.lenses import (
     SiliSenseProfiler,
     make_synthetic_workload_trace,
 )
+
+
+def _selftest_label(gate_verdict: str) -> str:
+    return "SYNTHETIC_SELFTEST_PASS" if gate_verdict == "CONFIRMED" else f"SYNTHETIC_SELFTEST_{gate_verdict}"
 
 
 def run_cpu_preflight() -> dict[str, Any]:
@@ -78,6 +84,8 @@ def run_cpu_preflight() -> dict[str, Any]:
         selection_summary=sel,
     )
 
+    pre_prof = SiliSenseProfiler(mode="telemetry-only", n_iaaft=99, n_shifts=120, seed=42).profile_trace(std_pairs[0][0])
+    pre_latch = PreAdaptationResidualLatch.capture_from_profile(pre_prof)
     ratchet = FiveGateAntiGoodhartRatchet().evaluate(
         base_effective_tokens=8192,
         cand_effective_tokens=8192,
@@ -87,18 +95,20 @@ def run_cpu_preflight() -> dict[str, Any]:
         cand_throttle_frac_q=Fraction(5, 100),
         cand_edp_head_q=Fraction(485, 1000),
         cand_edp_tail_q=Fraction(499, 1000),
-        pre_adapt_latch_sha256=hashlib.sha256(b"silisense-latch-preflight").hexdigest(),
+        pre_adapt_latch_sha256=pre_latch.latch_sha256(),
         cand_max_shock_z_q=Fraction(11, 10),
+        expected_latch=pre_latch,
     )
 
     payload = {
-        "schema": "silisense.prereg_s115.cpu_preflight.v1",
+        "schema": "silisense.prereg_s115.cpu_preflight.v2",
+        "evidence_class": "cpu_synthetic_preflight",
         "prereg_id": PREREG_S115_ID,
         "default_mode": "telemetry-only",
         "camera_policy": "ERR_CAMERA_FORBIDDEN",
-        "H15a_verdict": h15a["verdict"],
-        "H15b_verdict": h15b["verdict"],
-        "H15c_verdict": h15c["verdict"],
+        "H15a_synthetic_selftest": _selftest_label(h15a["verdict"]),
+        "H15b_synthetic_selftest": _selftest_label(h15b["verdict"]),
+        "H15c_synthetic_selftest": _selftest_label(h15c["verdict"]),
         "H15c_selected": h15c["selected_configs"],
         "ratchet_accepted": ratchet["accepted"],
         "quotient_fork_proven": two_step_mean_watt_quotient_fork_witness()["quotient_fork_proven"],
@@ -112,13 +122,13 @@ def run_cpu_preflight() -> dict[str, Any]:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="SiliSense PREREG-S115 Preflight & Offline Trace Suite")
-    parser.add_argument("--cpu-preflight", action="store_true", help="Run deterministic pure-stdlib CPU preflight")
+    parser = argparse.ArgumentParser(description="SiliSense Synthetic CPU Preflight & Offline Trace Suite")
+    parser.add_argument("--cpu-preflight", action="store_true", help="Run deterministic pure-stdlib synthetic CPU selftest")
     parser.add_argument("--profile-trace-json", type=Path, default=None, help="Profile an offline telemetry JSON trace")
     parser.add_argument("--enable-dmic-authorized", action="store_true", help="Opt-in Mode 2 DMIC authorization")
     parser.add_argument("--authorize-audio-window-sec", type=float, default=None, help="Bounded audio window in (0, 300] s")
     parser.add_argument("--pi-authorization-token", type=str, default=None, help="Explicit PI authorization token")
-    parser.add_argument("--json", action="store_true", help="Emit JSON output")
+    parser.add_argument("--json", action="store_true", help="Emit indented JSON output")
     args = parser.parse_args(argv)
 
     gate: AudioAuthorizationGate | None = None
@@ -138,6 +148,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         sys.stdout.write(json.dumps(out, indent=2, sort_keys=True, ensure_ascii=True) + "\n")
         return 0
 
+    require_ok(
+        bool(args.cpu_preflight) or argv is None or len(argv) == 0,
+        "ERR_CLI_MODE_REQUIRED",
+        "Specify --cpu-preflight or --profile-trace-json <path>",
+    )
     report = run_cpu_preflight()
     sys.stdout.write(json.dumps(report, indent=2 if args.json else None, sort_keys=True, ensure_ascii=True) + "\n")
     return 0

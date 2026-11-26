@@ -6,9 +6,9 @@ help:
 	@echo "SiliSense targets:"
 	@echo "  make test          Run pure-stdlib CPU unit test suite (0 sensor opens, 0 GPU touch)"
 	@echo "  make test-3mode    Run 3-mode isolated -I parity (-I -B, -I -O -B, -I -B -W error)"
-	@echo "  make bench-cpu     Run PREREG-S115 deterministic CPU preflight benchmark"
-	@echo "  make audit-hygiene Verify 0 bare asserts, 0 unseeded RNG, 0 path leaks, 0 bytecode"
-	@echo "  make clean         Remove build artifacts and bytecode"
+	@echo "  make bench-cpu     Run PREREG-S115 deterministic synthetic CPU preflight selftest"
+	@echo "  make audit-hygiene Verify AST, RNG seeding, path/slug hygiene, and 0 binary/bytecode artifacts"
+	@echo "  make clean         Remove build artifacts and Python bytecode inside repository"
 
 test:
 	CUDA_VISIBLE_DEVICES="" PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -B -m unittest discover -s tests -p "test_*.py" -v
@@ -28,5 +28,5 @@ audit-hygiene:
 
 clean:
 	rm -rf build dist *.egg-info
-	find . -name "__pycache__" -type d -prune -exec rm -rf {} +
-	find . -name "*.pyc" -delete
+	find . \( -path ./.git -o -path ./.venv \) -prune -o -name "__pycache__" -type d -prune -exec rm -rf {} +
+	find . \( -path ./.git -o -path ./.venv \) -prune -o -name "*.pyc" -type f -exec rm -f {} +

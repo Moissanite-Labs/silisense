@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 import re
+import subprocess
 import sys
 import unittest
 
@@ -29,11 +30,26 @@ _FORBIDDEN_EXTS = {
     ".gguf",
 }
 _AUDIT_TAG_RE = re.compile(r"\b" + "AU" + r"DIT-[A-Za-z0-9_-]+")
+_PRIVATE_SLUG_RE = re.compile(r"\b(" + "expe" + r"dition|" + "alet" + r"heia)\b", re.IGNORECASE)
+
+
+def _repo_files() -> list[Path]:
+    if (REPO_ROOT / ".git").exists():
+        proc = subprocess.run(
+            ["git", "-C", str(REPO_ROOT), "ls-files"],
+            capture_output=True,
+            text=True,
+            timeout=5.0,
+            check=False,
+        )
+        if proc.returncode == 0:
+            return [REPO_ROOT / ln for ln in proc.stdout.splitlines() if ln.strip() and (REPO_ROOT / ln).is_file()]
+    return sorted(p for p in REPO_ROOT.rglob("*") if ".git" not in p.parts and p.is_file())
 
 
 class TestRepoHygieneR5(unittest.TestCase):
     def test_01_ast_zero_bare_asserts_zero_unseeded_rng_and_zero_shell_true(self) -> None:
-        py_files = sorted(p for p in REPO_ROOT.rglob("*.py") if ".git" not in p.parts)
+        py_files = [p for p in _repo_files() if p.suffix == ".py"]
         self.assertGreaterEqual(len(py_files), 12)
 
         for py_path in py_files:
@@ -57,17 +73,23 @@ class TestRepoHygieneR5(unittest.TestCase):
                         has_seed_arg = (len(node.args) >= 1) or (len(node.keywords) >= 1)
                         self.assertTrue(has_seed_arg, f"Unseeded RNG call {func_name}() in {py_path.name}")
 
-    def test_02_zero_path_leaks_zero_audit_tags_and_zero_binary_artifacts(self) -> None:
-        home_tok = "/" + "home/"
-        for p in sorted(REPO_ROOT.rglob("*")):
-            if ".git" in p.parts:
-                continue
-            self.assertNotEqual(p.name, "__pycache__", f"Bytecode cache found: {p}")
-            if p.is_file():
-                self.assertNotIn(p.suffix.lower(), _FORBIDDEN_EXTS, f"Forbidden artifact: {p.name}")
-                txt = p.read_text(encoding="utf-8")
-                self.assertNotIn(home_tok, txt, f"Home path leak in {p.relative_to(REPO_ROOT)}")
-                self.assertIsNone(_AUDIT_TAG_RE.search(txt), f"Internal audit tag in {p.relative_to(REPO_ROOT)}")
+    def test_02_zero_path_leaks_zero_audit_tags_zero_private_slugs_and_zero_binaries(self) -> None:
+        home_unix = "/" + "home/"
+        home_mac = "/" + "Users/"
+        for d in REPO_ROOT.rglob("__pycache__"):
+            if ".git" not in d.parts and ".venv" not in d.parts:
+                self.fail(f"Bytecode cache found: {d.relative_to(REPO_ROOT)}")
+
+        for p in _repo_files():
+            rel = str(p.relative_to(REPO_ROOT))
+            self.assertNotIn(p.suffix.lower(), _FORBIDDEN_EXTS, f"Forbidden artifact: {rel}")
+            raw_bytes = p.read_bytes()
+            self.assertFalse(raw_bytes.startswith(b"\x7fELF"), f"ELF binary forbidden: {rel}")
+            txt = raw_bytes.decode("utf-8")
+            self.assertNotIn(home_unix, txt, f"Unix home path leak in {rel}")
+            self.assertNotIn(home_mac, txt, f"macOS home path leak in {rel}")
+            self.assertIsNone(_AUDIT_TAG_RE.search(txt), f"Internal audit tag in {rel}")
+            self.assertIsNone(_PRIVATE_SLUG_RE.search(txt), f"Private repo slug in {rel}")
 
 
 if __name__ == "__main__":

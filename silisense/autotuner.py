@@ -8,7 +8,7 @@ from typing import Any, Mapping, Sequence
 
 from silisense.airlock import AudioAuthorizationGate
 from silisense.errors import require_ok
-from silisense.governor import paired_stats
+from silisense.governor import PreAdaptationResidualLatch, paired_stats
 from silisense.lenses import SiliSenseProfiler
 
 LOCKED_LAMBDA_A3 = 0.15
@@ -248,11 +248,11 @@ class SiliSenseKernelAutotuner:
 
 
 def two_step_mean_watt_quotient_fork_witness() -> dict[str, Any]:
-    """Exact rational witness of the 2-step `mean_watt` quotient fork (`loom` Claim 12).
+    """Exact rational witness of the 2-step `mean_watt` quotient fork.
 
     Schedule A = (95 W, 95 W) and Schedule B = (60 W, 130 W) share identical
     2-step mean wattage (95 W), yet Schedule B triggers >= 110 W SwPowerCap
-    throttling on step 2, inflating real EDP from 95/1 to 269/2.
+    throttling on step 2, inflating real EDP from 95/1 to 1275/8 (= 159.375).
     """
     sched_steady = (Fraction(95), Fraction(95))
     sched_bursty = (Fraction(60), Fraction(130))
@@ -303,20 +303,27 @@ class FiveGateAntiGoodhartRatchet:
         cand_edp_tail_q: Fraction,
         pre_adapt_latch_sha256: str,
         cand_max_shock_z_q: Fraction,
+        expected_latch: PreAdaptationResidualLatch | None = None,
     ) -> dict[str, Any]:
         for qv in (base_edp_q, cand_edp_q, base_throttle_frac_q, cand_throttle_frac_q, cand_edp_head_q, cand_edp_tail_q, cand_max_shock_z_q):
             require_ok(isinstance(qv, Fraction), "ERR_RATCHET_NON_EXACT", f"Ratchet requires exact Fraction, got {type(qv).__name__}")
         require_ok(base_edp_q > 0 and cand_edp_q > 0 and cand_edp_head_q > 0, "ERR_RATCHET_POS", "EDP values must be > 0")
+        require_ok(
+            isinstance(expected_latch, PreAdaptationResidualLatch),
+            "ERR_RATCHET_LATCH_REQUIRED",
+            "G4 anti-Goodhart check requires an actual PreAdaptationResidualLatch instance to verify pre_adapt_latch_sha256",
+        )
 
         g1_cs08 = bool(int(base_effective_tokens) == int(cand_effective_tokens) and int(cand_effective_tokens) > 0)
         rel_gain_q = (base_edp_q - cand_edp_q) / base_edp_q
         g2_edp = bool(rel_gain_q >= self.min_edp_rel_gain_q)
         tail_drift_q = (cand_edp_tail_q - cand_edp_head_q) / cand_edp_head_q
         g3_thermal = bool(tail_drift_q <= self.max_tail_drift_q and cand_throttle_frac_q <= base_throttle_frac_q)
+        recomputed_latch_sha = expected_latch.latch_sha256()  # type: ignore[union-attr]
         g4_latch = bool(
-            len(pre_adapt_latch_sha256) == 64
-            and all(c in "0123456789abcdef" for c in pre_adapt_latch_sha256)
-            and len(set(pre_adapt_latch_sha256)) > 1
+            isinstance(pre_adapt_latch_sha256, str)
+            and len(pre_adapt_latch_sha256) == 64
+            and pre_adapt_latch_sha256 == recomputed_latch_sha
         )
         g5_no_shock_gaming = bool(cand_max_shock_z_q <= self.max_shock_z_q)
 

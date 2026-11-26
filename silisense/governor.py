@@ -2,50 +2,72 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+import hashlib
+import json
 import math
 import random
 import struct
 from typing import Any, Mapping, Sequence
 
-from silisense.errors import require_ok
+from silisense.errors import SiliSenseValueError, require_ok
 from silisense.lenses import compute_a5_precursor_lead_lag
+
+_F32_MAX_FINITE = 3.4028234663852886e38
+
+
+def _req_num(val: Any, name: str, code: str) -> float:
+    require_ok(
+        isinstance(val, (int, float)) and not isinstance(val, bool),
+        code,
+        f"{name} must be numeric (not bool), got {type(val).__name__}",
+    )
+    try:
+        fv = float(val)
+    except OverflowError as exc:
+        raise SiliSenseValueError(code, f"{name} overflowed float64") from exc
+    require_ok(math.isfinite(fv), code, f"{name} must be finite, got {val!r}")
+    return fv
 
 
 def floor_to_exact_f32(alpha: float) -> float:
-    """Round `alpha` downward to an exact IEEE-754 binary32 dyadic rational (0-ULP overshoot)."""
-    require_ok(math.isfinite(alpha) and alpha > 0.0, "ERR_BAD_DYADIC_ALPHA", f"alpha must be finite > 0, got {alpha}")
-    f32 = struct.unpack("<f", struct.pack("<f", float(alpha)))[0]
-    if f32 > float(alpha):
+    """Round `alpha` downward to a strictly positive IEEE-754 binary32 dyadic rational (0-ULP overshoot)."""
+    fv = _req_num(alpha, "alpha", "ERR_BAD_DYADIC_ALPHA")
+    require_ok(fv > 0.0, "ERR_BAD_DYADIC_ALPHA", f"alpha must be > 0, got {fv}")
+    require_ok(fv <= _F32_MAX_FINITE, "ERR_DYADIC_OVERFLOW", f"alpha {fv} exceeds binary32 max finite value")
+    try:
+        packed = struct.pack("<f", fv)
+    except OverflowError as exc:
+        raise SiliSenseValueError("ERR_DYADIC_OVERFLOW", f"alpha {fv} overflowed binary32") from exc
+    f32 = struct.unpack("<f", packed)[0]
+    require_ok(math.isfinite(f32) and f32 > 0.0, "ERR_DYADIC_UNDERFLOW", f"alpha {fv} underflowed binary32 positive range")
+    if f32 > fv:
         bits = struct.unpack("<I", struct.pack("<f", f32))[0]
-        require_ok(bits > 0, "ERR_DYADIC_UNDERFLOW", "binary32 underflow at zero")
+        require_ok(bits > 1, "ERR_DYADIC_UNDERFLOW", "binary32 underflow at positive floor")
         f32 = struct.unpack("<f", struct.pack("<I", bits - 1))[0]
-    require_ok(f32 <= float(alpha), "ERR_DYADIC_OVERSHOOT", "binary32 floor exceeded target alpha")
+    require_ok(0.0 < f32 <= fv, "ERR_DYADIC_OVERSHOOT", "binary32 floor violated (0, alpha] bound")
     return float(f32)
 
 
 def check_delay_bandwidth_lock(f_control_hz: float, tau_sensor_sec: float) -> dict[str, Any]:
-    """Phase-stability Delay-Bandwidth Lock: |1 - exp(-i 2pi f tau)| < 1 iff f * tau < 1/6."""
-    require_ok(
-        math.isfinite(f_control_hz) and f_control_hz > 0.0 and math.isfinite(tau_sensor_sec) and tau_sensor_sec > 0.0,
-        "ERR_BAD_DELAY_BW",
-        "f_control_hz and tau_sensor_sec must be finite > 0",
-    )
-    prod = float(f_control_hz) * float(tau_sensor_sec)
+    """Principal-band phase-stability Delay-Bandwidth Lock (`f * tau < 1/6` => `|1 - exp(-i 2pi f tau)| < 1`)."""
+    fc = _req_num(f_control_hz, "f_control_hz", "ERR_BAD_DELAY_BW")
+    tau = _req_num(tau_sensor_sec, "tau_sensor_sec", "ERR_BAD_DELAY_BW")
+    require_ok(fc > 0.0 and tau > 0.0, "ERR_BAD_DELAY_BW", "f_control_hz and tau_sensor_sec must be > 0")
+    prod = fc * tau
     return {
         "f_tau_product": round(prod, 8),
         "limit": round(1.0 / 6.0, 8),
-        "max_stable_control_hz": round(1.0 / (6.0 * float(tau_sensor_sec)), 4),
+        "max_stable_control_hz": round(1.0 / (6.0 * tau), 4),
         "stable": bool(prod < (1.0 / 6.0)),
     }
 
 
 def smooth_l53_shared_heatpipe_excess(rail_excess_watts: Sequence[float]) -> float:
-    """Smooth C^1 shared-heatpipe excess norm (sum_i max(0, u_i)^{5/3})^{3/5}."""
+    """Smooth C^1 shared-heatpipe excess norm `(sum_i max(0, u_i)^{5/3})^{3/5}`."""
     s = 0.0
     for v in rail_excess_watts:
-        fv = float(v)
-        require_ok(math.isfinite(fv), "ERR_NONFINITE_RAIL", "Non-finite rail excess watts")
+        fv = _req_num(v, "rail_excess_watts", "ERR_NONFINITE_RAIL")
         if fv > 0.0:
             s += fv ** (5.0 / 3.0)
     return float(s ** (3.0 / 5.0)) if s > 0.0 else 0.0
@@ -61,13 +83,18 @@ def lyapunov_telescoping_choke(
     g_floor: float = 0.70,
 ) -> float:
     """Runaway-free telescoping Lyapunov conductance choke quantized downward via `floor_to_exact_f32`."""
-    require_ok(0.0 < g_floor <= 1.0 and alpha >= 0.0 and 0.0 <= beta <= 1.0, "ERR_LYAPUNOV_PARAMS", "Invalid Lyapunov params")
-    require_ok(math.isfinite(g_prev) and math.isfinite(u_53), "ERR_LYAPUNOV_FINITE", "Non-finite Lyapunov state")
-    g_cur = min(1.0, max(g_floor, float(g_prev)))
-    excess = max(0.0, float(u_53) - float(u_thresh))
-    num = g_cur + float(beta) * (1.0 - g_cur)
-    den = 1.0 + float(alpha) * excess * excess
-    raw_next = min(1.0, max(g_floor, num / den))
+    gp = _req_num(g_prev, "g_prev", "ERR_LYAPUNOV_FINITE")
+    u_val = _req_num(u_53, "u_53", "ERR_LYAPUNOV_FINITE")
+    ut = _req_num(u_thresh, "u_thresh", "ERR_LYAPUNOV_FINITE")
+    al = _req_num(alpha, "alpha", "ERR_LYAPUNOV_PARAMS")
+    be = _req_num(beta, "beta", "ERR_LYAPUNOV_PARAMS")
+    gf = _req_num(g_floor, "g_floor", "ERR_LYAPUNOV_PARAMS")
+    require_ok(0.0 < gf <= 1.0 and al >= 0.0 and 0.0 <= be <= 1.0 and ut >= 0.0, "ERR_LYAPUNOV_PARAMS", "Invalid Lyapunov params")
+    g_cur = min(1.0, max(gf, gp))
+    excess = max(0.0, u_val - ut)
+    num = g_cur + be * (1.0 - g_cur)
+    den = 1.0 + al * excess * excess
+    raw_next = min(1.0, max(gf, num / den))
     return floor_to_exact_f32(raw_next)
 
 
@@ -79,24 +106,25 @@ def gate_asymmetric_step(
     obj_after: float,
 ) -> str:
     """Asymmetric safety trust-region gate with deadlock-free `.okRecovery` and `lexImproves`."""
-    for v in (headroom_before, headroom_after, obj_before, obj_after):
-        require_ok(math.isfinite(float(v)), "ERR_GATE_NONFINITE", "Non-finite gate value")
-    if headroom_before < 0.0:
-        # Out-of-envelope thermal/power state: require strict monotone headroom recovery without deadlocking
-        return ".okRecovery" if headroom_after > headroom_before else ".refusedUnsafe"
-    if headroom_after < 0.0:
+    hb = _req_num(headroom_before, "headroom_before", "ERR_GATE_NONFINITE")
+    ha = _req_num(headroom_after, "headroom_after", "ERR_GATE_NONFINITE")
+    ob = _req_num(obj_before, "obj_before", "ERR_GATE_NONFINITE")
+    oa = _req_num(obj_after, "obj_after", "ERR_GATE_NONFINITE")
+    if hb < 0.0:
+        return ".okRecovery" if ha > hb else ".refusedUnsafe"
+    if ha < 0.0:
         return ".refusedUnsafe"
-    if obj_after < obj_before:
+    if oa < ob:
         return ".okStep"
-    if obj_after == obj_before and headroom_after > headroom_before:
+    if oa == ob and ha > hb:
         return ".okPureSafety"
-    if obj_after == obj_before and headroom_after <= headroom_before:
+    if oa == ob and ha <= hb:
         return ".refusedHeadroomErosion"
     return ".refusedObjectiveRegression"
 
 
 def cyclic_switch_dist(pstate_seq: Sequence[int]) -> int:
-    """Exact cumulative cyclic DVFS / P-state transition distance (`TransitionBounds.lean`)."""
+    """Exact cumulative cyclic DVFS / P-state transition distance."""
     require_ok(len(pstate_seq) >= 1, "ERR_EMPTY_PSTATES", "pstate_seq must be non-empty")
     for p in pstate_seq:
         require_ok(isinstance(p, int) and not isinstance(p, bool) and p >= 0, "ERR_BAD_PSTATE", f"Invalid P-state {p!r}")
@@ -109,7 +137,7 @@ def cyclic_switch_dist(pstate_seq: Sequence[int]) -> int:
 
 @dataclass(frozen=True)
 class PreAdaptationResidualLatch:
-    """Gate Contract 4 Pre-Adaptation Projection Latch (freezes raw pre-tuning silicon residuals)."""
+    """Contract-4 Pre-Adaptation Projection Latch (freezes raw pre-tuning silicon residuals)."""
 
     latched_abs_a3: float
     latched_z_a3: float
@@ -119,25 +147,53 @@ class PreAdaptationResidualLatch:
     latched_mean_gpu_w: float
     open_pathology: bool
 
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "latched_abs_a3", round(_req_num(self.latched_abs_a3, "latched_abs_a3", "ERR_LATCH_VAL"), 8))
+        object.__setattr__(self, "latched_z_a3", round(_req_num(self.latched_z_a3, "latched_z_a3", "ERR_LATCH_VAL"), 8))
+        object.__setattr__(self, "latched_a5_lead_ms", round(_req_num(self.latched_a5_lead_ms, "latched_a5_lead_ms", "ERR_LATCH_VAL"), 8))
+        object.__setattr__(self, "latched_a7_copula_mi_nats", round(_req_num(self.latched_a7_copula_mi_nats, "latched_a7_copula_mi_nats", "ERR_LATCH_VAL"), 8))
+        object.__setattr__(self, "latched_z_a7", round(_req_num(self.latched_z_a7, "latched_z_a7", "ERR_LATCH_VAL"), 8))
+        object.__setattr__(self, "latched_mean_gpu_w", round(_req_num(self.latched_mean_gpu_w, "latched_mean_gpu_w", "ERR_LATCH_VAL"), 8))
+        require_ok(isinstance(self.open_pathology, bool), "ERR_LATCH_BOOL", "open_pathology must be bool")
+
+    def to_canon_json(self) -> str:
+        return json.dumps(asdict(self), sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+
+    def latch_sha256(self) -> str:
+        """Deterministic SHA-256 over the frozen pre-adaptation silicon residual latch."""
+        return hashlib.sha256(self.to_canon_json().encode("ascii")).hexdigest()
+
     @classmethod
     def capture_from_profile(cls, profile_report: Mapping[str, Any]) -> "PreAdaptationResidualLatch":
+        require_ok(isinstance(profile_report, Mapping) and "observables" in profile_report, "ERR_LATCH_SCHEMA", "Missing observables in profile_report")
         obs = profile_report["observables"]
+        require_ok(
+            isinstance(obs, Mapping)
+            and "A3_telemetry" in obs
+            and "A5_precursor" in obs
+            and "A7_uncore_copula_mi" in obs
+            and "mean_gpu_power_w" in profile_report,
+            "ERR_LATCH_SCHEMA",
+            "Incomplete observables in profile_report",
+        )
         a3 = obs["A3_telemetry"]
         a5 = obs["A5_precursor"]
         a7 = obs["A7_uncore_copula_mi"]
+        z_a3 = _req_num(a3.get("z_iaaft"), "a3.z_iaaft", "ERR_LATCH_VAL")
+        z_a7 = _req_num(a7.get("z_iaaft"), "a7.z_iaaft", "ERR_LATCH_VAL")
         open_flag = bool(
-            a3["significant_0p005"]
-            or a7["significant_0p005"]
-            or abs(float(a3["z_iaaft"])) >= 3.5
-            or float(a7["z_iaaft"]) >= 3.5
+            bool(a3.get("significant_0p005", False))
+            or bool(a7.get("significant_0p005", False))
+            or abs(z_a3) >= 3.5
+            or z_a7 >= 3.5
         )
         return cls(
-            latched_abs_a3=float(a3["abs_asymmetry"]),
-            latched_z_a3=float(a3["z_iaaft"]),
-            latched_a5_lead_ms=float(a5["peak_precursor_lag_ms"]),
-            latched_a7_copula_mi_nats=float(a7["copula_mi_nats"]),
-            latched_z_a7=float(a7["z_iaaft"]),
-            latched_mean_gpu_w=float(profile_report["mean_gpu_power_w"]),
+            latched_abs_a3=_req_num(a3.get("abs_asymmetry"), "a3.abs_asymmetry", "ERR_LATCH_VAL"),
+            latched_z_a3=z_a3,
+            latched_a5_lead_ms=_req_num(a5.get("peak_precursor_lag_ms"), "a5.peak_precursor_lag_ms", "ERR_LATCH_VAL"),
+            latched_a7_copula_mi_nats=_req_num(a7.get("copula_mi_nats"), "a7.copula_mi_nats", "ERR_LATCH_VAL"),
+            latched_z_a7=z_a7,
+            latched_mean_gpu_w=_req_num(profile_report.get("mean_gpu_power_w"), "mean_gpu_power_w", "ERR_LATCH_VAL"),
             open_pathology=open_flag,
         )
 
@@ -145,9 +201,11 @@ class PreAdaptationResidualLatch:
 def paired_stats(baseline_vals: Sequence[float], candidate_vals: Sequence[float]) -> dict[str, float]:
     require_ok(len(baseline_vals) == len(candidate_vals) and len(baseline_vals) >= 3, "ERR_PAIRED_LEN", "Need >= 3 pairs")
     n = len(baseline_vals)
-    diffs = [float(b) - float(a) for a, b in zip(baseline_vals, candidate_vals)]
-    mean_a = sum(float(a) for a in baseline_vals) / float(n)
-    mean_b = sum(float(b) for b in candidate_vals) / float(n)
+    a_clean = [_req_num(v, "baseline_vals", "ERR_PAIRED_VAL") for v in baseline_vals]
+    b_clean = [_req_num(v, "candidate_vals", "ERR_PAIRED_VAL") for v in candidate_vals]
+    diffs = [b - a for a, b in zip(a_clean, b_clean)]
+    mean_a = sum(a_clean) / float(n)
+    mean_b = sum(b_clean) / float(n)
     mean_d = sum(diffs) / float(n)
     var_d = sum((d - mean_d) * (d - mean_d) for d in diffs) / float(n - 1)
     se_d = math.sqrt(max(0.0, var_d)) / math.sqrt(float(n))
@@ -180,12 +238,25 @@ class PrecursorThrottleGovernor:
         hold_steps: int = 8,
         cooldown_steps: int = 12,
     ) -> None:
-        require_ok(z_trigger >= 1.5, "ERR_BAD_Z_TRIGGER", "z_trigger must be >= 1.5")
-        require_ok(0.5 <= damping_scale < 1.0, "ERR_BAD_DAMPING", "damping_scale must lie in [0.5, 1.0)")
-        require_ok(hold_steps >= 1 and cooldown_steps >= 0, "ERR_BAD_HOLD", "Invalid hold/cooldown steps")
-        self.z_trigger = float(z_trigger)
-        self.ema_alpha = float(ema_alpha)
-        self.damping_scale = floor_to_exact_f32(float(damping_scale))
+        zt = _req_num(z_trigger, "z_trigger", "ERR_BAD_Z_TRIGGER")
+        ea = _req_num(ema_alpha, "ema_alpha", "ERR_BAD_EMA_ALPHA")
+        ds = _req_num(damping_scale, "damping_scale", "ERR_BAD_DAMPING")
+        require_ok(1.5 <= zt <= 100.0, "ERR_BAD_Z_TRIGGER", "z_trigger must lie in [1.5, 100.0]")
+        require_ok(0.0 < ea < 1.0, "ERR_BAD_EMA_ALPHA", "ema_alpha must lie in (0.0, 1.0)")
+        require_ok(0.5 <= ds < 1.0, "ERR_BAD_DAMPING", "damping_scale must lie in [0.5, 1.0)")
+        require_ok(
+            isinstance(hold_steps, int) and not isinstance(hold_steps, bool) and hold_steps >= 1,
+            "ERR_BAD_HOLD",
+            "hold_steps must be int >= 1",
+        )
+        require_ok(
+            isinstance(cooldown_steps, int) and not isinstance(cooldown_steps, bool) and cooldown_steps >= 0,
+            "ERR_BAD_HOLD",
+            "cooldown_steps must be int >= 0",
+        )
+        self.z_trigger = zt
+        self.ema_alpha = ea
+        self.damping_scale = floor_to_exact_f32(ds)
         self.hold_steps = int(hold_steps)
         self.cooldown_steps = int(cooldown_steps)
         self.reset()
@@ -200,14 +271,14 @@ class PrecursorThrottleGovernor:
         self.trigger_steps: list[int] = []
 
     def step(self, fast_power_w: float) -> tuple[float, float]:
-        require_ok(math.isfinite(fast_power_w), "ERR_NONFINITE_POWER", "fast_power_w must be finite")
+        fw = _req_num(fast_power_w, "fast_power_w", "ERR_NONFINITE_POWER")
         self._step_idx += 1
         if self._prev_val is None:
-            self._prev_val = float(fast_power_w)
+            self._prev_val = fw
             return 1.0, 0.0
 
-        pos_inc = max(0.0, float(fast_power_w) - self._prev_val)
-        self._prev_val = float(fast_power_w)
+        pos_inc = max(0.0, fw - self._prev_val)
+        self._prev_val = fw
 
         z_innov = 0.0
         if self._step_idx >= 12:
@@ -308,7 +379,7 @@ def simulate_sustained_governor_benchmark(
     n_steps: int = 800,
     dt_ms: float = 5.0,
 ) -> dict[str, Any]:
-    """Pure-stdlib simulation of all 4 locked PREREG-S115 H15b arms."""
+    """Pure-stdlib synthetic selftest of all 4 PREREG-S115 H15b arms."""
     require_ok(len(seeds) >= 3 and n_steps >= 200, "ERR_H15B_PARAMS", "Need >= 3 seeds and >= 200 steps")
     arms = ("NoGovernor", "Reactive-1Hz-SMI", "Shuffled-Trigger-Control", "SiliSense-Precursor-Gov")
     per_arm_stall: dict[str, list[float]] = {a: [] for a in arms}
@@ -411,9 +482,12 @@ def simulate_sustained_governor_benchmark(
             per_arm_cv[arm_name].append(cv)
             per_arm_tps[arm_name].append(tv)
 
-    return grade_h15b_results(
+    res = grade_h15b_results(
         lead_receipts=lead_receipts,
         per_arm_stall=per_arm_stall,
         per_arm_cv=per_arm_cv,
         per_arm_tps=per_arm_tps,
     )
+    res["evidence_class"] = "cpu_synthetic_selftest"
+    res["synthetic_selftest_status"] = "SYNTHETIC_SELFTEST_PASS" if res["verdict"] == "CONFIRMED" else "SYNTHETIC_SELFTEST_FAIL"
+    return res

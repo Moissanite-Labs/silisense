@@ -1,19 +1,19 @@
-"""Pure-stdlib S113 non-textbook silicon lenses, S20c exact-Q operators, and 7-tone Fisher ID.
+"""Pure-stdlib non-textbook silicon lenses, zero-float exact-Q operators, and 7-tone Fisher ID.
 
 Runs 100% on stock Python stdlib (`math`, `cmath`, `fractions.Fraction`, seeded
 `random.Random`) with zero mandatory third-party packages:
-  - S113 Non-Textbook Lenses:
+  - Non-Textbook Silicon & Firmware Lenses:
       * A3: Microscopic third-order time-reversal shockwave asymmetry + Westfall-Young max-|z| IAAFT
       * A5: Causal EMA positive-innovation precursor lead-lag + circular-shift null
       * A7: 2-pass Modified Gram-Schmidt multi-lag Schur residualization + Miller-Madow copula MI
       * A1 (Mode-2 gated): Kim-Powers [6, 23] kHz ultrasonic auto-bicoherence
       * A2 (Mode-2 gated): Nolte [18.5, 22.2] kHz imaginary coherency + parabolic GCC-PHAT VRM TDOA
-  - S20c Zero-Float Exact-Q Monotone-Invariant Trio + WHT_PHASE:
+  - Zero-Float Exact-Q Monotone-Invariant Trio + WHT_PHASE:
       * OP1_SEAM1: Sliding W=32 exact Fraction Sherman-Morrison leverage shock h_t = q_t / (1 + q_t)
       * OP2_SEAM3: Exact m=3 7x7 ordinal Hodge-curl Phi_asym in Q cap [0, 1] + O(N) HVG beta_1
       * OP3_F3: Exact 3x3 rational non-normality commutator kappa_F3 + Sylvester In(I_3 - T^T T)
       * wht_phase_surrogate: Exact Walsh-Hadamard sequency-preserving sign randomization (paired w/ IAAFT)
-  - ASKA-XFER-H1 Delay-Locked 7-Tone Fisher Impedance Collinearity Detector:
+  - Delay-Locked 7-Tone Fisher Impedance Collinearity Detector:
       * Refuses free transport delay (ERR_FREE_DELAY_FORBIDDEN); strips A5-locked tau_d and
         evaluates all 35 (7 choose 3) collinearity determinants det[1, -Im H / u, Re H].
 """
@@ -248,13 +248,15 @@ def compute_a3_time_reversal_asymmetry(
             }
         )
 
-    for row, ph in zip(per_lag, holm_bonferroni(raw_pvals)):
+    holm_lags = holm_bonferroni(raw_pvals)
+    for row, ph in zip(per_lag, holm_lags):
         row["p_holm"] = round(ph, 6)
 
     best = max(per_lag, key=lambda r: abs(float(r["z_iaaft"])))
     obs_max_z = abs(float(best["z_iaaft"]))
     ge_max_t = sum(1 for row_z in surr_abs_z if max(row_z) >= obs_max_z - 1e-12)
     p_max_t = float(1 + ge_max_t) / float(1 + n_iaaft)
+    min_lag_holm = min(holm_lags)
 
     return {
         "lens": "A3_time_reversal_asymmetry",
@@ -266,7 +268,8 @@ def compute_a3_time_reversal_asymmetry(
         "abs_asymmetry": best["abs_asymmetry"],
         "z_iaaft": best["z_iaaft"],
         "p_emp": best["p_emp"],
-        "p_holm": round(p_max_t, 6),
+        "p_max_t": round(p_max_t, 6),
+        "p_holm": round(min_lag_holm, 6),
         "significant_0p005": bool(p_max_t < 0.005 and obs_max_z >= 3.5),
         "per_lag": per_lag,
     }
@@ -774,11 +777,17 @@ def compute_op1_seam1_sherman_morrison_leverage(
         q_t = z0 * u0 + z1 * u1
         h_t = q_t / (Fraction(1) + q_t)
 
-        # Verify exact Sherman-Morrison identity: (G + z z^T)^{-1} z == G^{-1} z / (1 + q_t)
+        # Verify exact Sherman-Morrison identity on BOTH components: (G + z z^T)^{-1} z == G^{-1} z / (1 + q_t)
         gp00, gp01, gp11 = g00 + z0 * z0, g01 + z0 * z1, g11 + z1 * z1
         det_gp = gp00 * gp11 - gp01 * gp01
         up0 = (gp11 * z0 - gp01 * z1) / det_gp
-        require_ok(up0 == u0 / (Fraction(1) + q_t), "ERR_OP1_SM_IDENTITY", "Sherman-Morrison identity failed")
+        up1 = (-gp01 * z0 + gp00 * z1) / det_gp
+        denom_sm = Fraction(1) + q_t
+        require_ok(
+            up0 == u0 / denom_sm and up1 == u1 / denom_sm,
+            "ERR_OP1_SM_IDENTITY",
+            "Sherman-Morrison vector identity failed",
+        )
 
         if h_t > max_h:
             max_h = h_t
@@ -876,27 +885,26 @@ def compute_op3_f3_nonnormal_commutator(
     comm_f2 = sum((ttt[i][j] - tt_t[i][j]) ** 2 for i in range(3) for j in range(3))
     kappa_q = Fraction(0) if frob_t2 == 0 else (comm_f2 / (frob_t2 * frob_t2))
 
-    # Exact rational LDL^T / Gaussian pivot signs of M = I_3 - T^T T (transient energy growth iff n_neg > 0)
-    m_mat = [[(Fraction(1) if i == j else Fraction(0)) - ttt[i][j] for j in range(3)] for i in range(3)]
-    a = [list(row) for row in m_mat]
-    n_neg = 0
-    for k in range(3):
-        piv = a[k][k]
-        if piv == 0:
-            for r in range(k + 1, 3):
-                if a[r][r] != 0:
-                    a[k], a[r] = a[r], a[k]
-                    for idx in range(3):
-                        a[idx][k], a[idx][r] = a[idx][r], a[idx][k]
-                    piv = a[k][k]
-                    break
-        if piv < 0:
-            n_neg += 1
-        if piv != 0:
-            for i in range(k + 1, 3):
-                factor = a[i][k] / piv
-                for j in range(k + 1, 3):
-                    a[i][j] -= factor * a[k][j]
+    # Exact negative eigenvalue count (Sylvester negative inertia) of real symmetric 3x3 M = I_3 - T^T T
+    # via Descartes' Rule of Signs on q(mu) = det(mu I_3 + M) = mu^3 + c1 mu^2 + c2 mu + c3.
+    # Because M is real symmetric, all 3 eigenvalues of M are real, so Descartes' sign-change count
+    # on the non-zero subsequence of (1, c1, c2, c3) in Q^4 is 100% exact even at zero diagonal pivots!
+    m = [[(Fraction(1) if i == j else Fraction(0)) - ttt[i][j] for j in range(3)] for i in range(3)]
+    c1 = m[0][0] + m[1][1] + m[2][2]
+    c2 = (
+        (m[0][0] * m[1][1] - m[0][1] * m[1][0])
+        + (m[0][0] * m[2][2] - m[0][2] * m[2][0])
+        + (m[1][1] * m[2][2] - m[1][2] * m[2][1])
+    )
+    c3 = (
+        m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
+        - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
+        + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0])
+    )
+    nonzero_coeffs = [v for v in (Fraction(1), c1, c2, c3) if v != 0]
+    n_neg = sum(
+        1 for idx in range(len(nonzero_coeffs) - 1) if (nonzero_coeffs[idx] > 0) != (nonzero_coeffs[idx + 1] > 0)
+    )
 
     return {
         "operator": "OP3_F3_nonnormal_commutator",
@@ -1084,7 +1092,7 @@ class SiliSenseProfiler:
                 )
 
         p_family = [
-            float(a3_res["p_holm"]),
+            float(a3_res["p_max_t"]),
             float(a5_res["p_circ"]),
             float(a7_res["p_emp"]),
         ]

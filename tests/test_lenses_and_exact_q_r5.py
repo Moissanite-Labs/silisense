@@ -1,4 +1,4 @@
-"""R5 tests for S113 lenses (A1/A2/A3/A5/A7), S20c exact-Q operators, and 7-tone Fisher ID."""
+"""R5 tests for silicon lenses (A1/A2/A3/A5/A7), exact-Q operators, and 7-tone Fisher ID."""
 
 from __future__ import annotations
 
@@ -64,6 +64,8 @@ class TestLensesAndExactQR5(unittest.TestCase):
 
         self.assertTrue(a3["significant_0p005"])
         self.assertGreaterEqual(abs(a3["z_iaaft"]), 3.5)
+        self.assertIn("p_max_t", a3)
+        self.assertLess(a3["p_max_t"], 0.005)
         self.assertTrue(a5["significant_0p005"])
         self.assertAlmostEqual(a5["peak_precursor_lag_ms"], -80.0, delta=10.0)
         self.assertTrue(a7["significant_0p005"])
@@ -162,6 +164,17 @@ class TestLensesAndExactQR5(unittest.TestCase):
         op3_norm = compute_op3_f3_nonnormal_commutator(t_normal)
         self.assertEqual(op3_norm["kappa_f3_exact_q"], "0/1")
         self.assertFalse(op3_norm["transient_overshoot_risk"])
+
+        # Zero-diagonal indefinite block counterexample: T = [[1, 1, 0], [0, 0, 0], [0, 0, 0]] => ||T||_2 = sqrt(2) > 1
+        # M = I_3 - T^T T = [[0, -1, 0], [-1, 0, 0], [0, 0, 1]] has eigenvalues (-1, +1, +1) => neg_inertia == 1!
+        t_zero_piv = [
+            [Fraction(1), Fraction(1), Fraction(0)],
+            [Fraction(0), Fraction(0), Fraction(0)],
+            [Fraction(0), Fraction(0), Fraction(0)],
+        ]
+        op3_zp = compute_op3_f3_nonnormal_commutator(t_zero_piv)
+        self.assertEqual(op3_zp["gram_contractivity_neg_inertia"], 1)
+        self.assertTrue(op3_zp["transient_overshoot_risk"])
 
         # WHT_PHASE preserves L2 energy (Parseval)
         vec64 = [float((i % 7) - 3) for i in range(64)]

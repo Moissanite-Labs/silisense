@@ -19,8 +19,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install SiliSense (zero external dependencies)
+      - name: Install build backend and SiliSense (zero runtime dependencies)
         run: |
+          python3 -m pip install "setuptools>=77"
           python3 -m pip install --no-build-isolation --no-deps -e .
       - name: Run 3-mode isolated -I test parity (0 bare asserts, 0 skips, 0 sensor opens)
         env:

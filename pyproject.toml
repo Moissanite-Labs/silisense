@@ -1,13 +1,15 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "silisense"
 version = "0.1.0"
-description = "Fail-closed silicon physics profiler, precursor rail governor, and anti-Goodhart EDP kernel autotuner (Track S115 / HoloSphere sibling)"
+description = "Fail-closed silicon physics profiler, precursor rail governor, and anti-Goodhart EDP kernel autotuner"
 readme = "README.md"
-license = {text = "MIT"}
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{name = "Moissanite Labs"}]
 requires-python = ">=3.11"
 dependencies = []
 
