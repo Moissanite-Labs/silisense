@@ -18,6 +18,8 @@ test-3mode:
 	for flags in "-I -B" "-I -O -B" "-I -B -W error"; do \
 		echo "=== [$$flags] ==="; \
 		CUDA_VISIBLE_DEVICES="" PYTHONDONTWRITEBYTECODE=1 $(PYTHON) $$flags tests/run_all.py; \
+		CUDA_VISIBLE_DEVICES="" PYTHONDONTWRITEBYTECODE=1 $(PYTHON) $$flags silisense/nvml_profiler.py --self-test --json; \
+		CUDA_VISIBLE_DEVICES="" PYTHONDONTWRITEBYTECODE=1 $(PYTHON) $$flags silisense/resource_guard.py --self-test --json; \
 	done
 
 bench-cpu:
@@ -27,6 +29,4 @@ audit-hygiene:
 	CUDA_VISIBLE_DEVICES="" PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I -B tests/test_repo_hygiene_r5.py -v
 
 clean:
-	rm -rf build dist *.egg-info
-	find . \( -path ./.git -o -path ./.venv \) -prune -o -name "__pycache__" -type d -prune -exec rm -rf {} +
-	find . \( -path ./.git -o -path ./.venv \) -prune -o -name "*.pyc" -type f -exec rm -f {} +
+	CUDA_VISIBLE_DEVICES="" PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -I -B -c 'import pathlib, shutil; r = pathlib.Path("."); [shutil.rmtree(p, ignore_errors=True) for p in list(r.glob("*.egg-info")) + [r / "build", r / "dist", r / ".pytest_cache"] if p.exists()]; [shutil.rmtree(p, ignore_errors=True) for p in r.rglob("__pycache__") if ".git" not in p.parts and ".venv" not in p.parts]; [p.unlink(missing_ok=True) for ext in ("*.pyc", "*.pyo") for p in r.rglob(ext) if ".git" not in p.parts and ".venv" not in p.parts]'
