@@ -18,6 +18,8 @@ accel = ["numpy>=1.26", "scipy>=1.11"]
 
 [project.scripts]
 silisense-bench = "silisense.benchmarks.prereg_s115_suite:main"
+silisense-nvml = "silisense.nvml_profiler:main"
+silisense-guard = "silisense.resource_guard:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

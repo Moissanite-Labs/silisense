@@ -44,3 +44,18 @@ jobs:
           python3 -I -B -W error silisense/benchmarks/prereg_s115_suite.py --cpu-preflight --json > /tmp/s115_we.json
           diff -u /tmp/s115_b.json /tmp/s115_ob.json
           diff -u /tmp/s115_b.json /tmp/s115_we.json
+      - name: Run NVML profiler and resource guard selftests across 3 isolated R4 modes
+        env:
+          CUDA_VISIBLE_DEVICES: ""
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          python3 -I -B silisense/nvml_profiler.py --self-test --json > /tmp/nvml_b.json
+          python3 -I -O -B silisense/nvml_profiler.py --self-test --json > /tmp/nvml_ob.json
+          python3 -I -B -W error silisense/nvml_profiler.py --self-test --json > /tmp/nvml_we.json
+          diff -u /tmp/nvml_b.json /tmp/nvml_ob.json
+          diff -u /tmp/nvml_b.json /tmp/nvml_we.json
+          python3 -I -B silisense/resource_guard.py --self-test --json > /tmp/guard_b.json
+          python3 -I -O -B silisense/resource_guard.py --self-test --json > /tmp/guard_ob.json
+          python3 -I -B -W error silisense/resource_guard.py --self-test --json > /tmp/guard_we.json
+          diff -u /tmp/guard_b.json /tmp/guard_ob.json
+          diff -u /tmp/guard_b.json /tmp/guard_we.json

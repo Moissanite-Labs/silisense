@@ -38,6 +38,10 @@
 |  silisense/razor.py            30 kHz BER-Canary Razor Controller       |
 |                                + N=256 Epoch Hysteresis & 16 B Rollback |
 |                                + Non-Scalar Krein-Holonomy Detector K_t |
+|  silisense/nvml_profiler.py    100 Hz NVML 4-Field Energy & Thermal     |
+|                                + Fail-Closed Guards & Disclaimer Tag    |
+|  silisense/resource_guard.py   Single-Loader flock + O_NOFOLLOW + PSI   |
+|                                + GPU-Idle Check & --timeout-seconds     |
 |  silisense/holosphere_bridge.py Canonical SHA256 One-Way Step Bridge    |
 |  include/razor_abi_4byte_sys.h 64 B Cacheline .sys Canary & 16 B Pi ABI |
 +------------------------------------+------------------------------------+
@@ -77,6 +81,13 @@ Evaluated live in Mode 1 (`telemetry-only`, `0` audio/camera/IR opens) across `3
 
 ---
 
+## NVML 4-Field Energy & Thermal Profiler + Host Resource Guard
+
+- **NVML 4-Field Energy & Thermal Contract (`silisense/nvml_profiler.py`, `silisense-nvml`):** `NvmlEnergyProfiler` (`NvmlEnergyMonitor`) integrates `libnvidia-ml.so.1` power samples via trapezoidal quadrature and outputs canonical `nvml_avg_power_w`, `energy_j_per_tok`, `energy_tok_per_j`, `energy_wh_run`, and `peak_temp_c` fields alongside fail-closed init/sample/duration/non-finite/thermal-ceiling/consistency checks (`validate_nvml_energy_report`). Every report unconditionally embeds `energy_power_status = "UNCONTROLLED_LAPTOP_NOT_CLAIMED"` and the mandatory uncontrolled-variables disclaimer.
+- **Single-Loader Host Resource Guard (`silisense/resource_guard.py`, `silisense-guard`):** Enforces exclusive `fcntl.flock` serialization (`0o600`, `st_nlink == 1`) with `O_DIRECTORY | O_NOFOLLOW` ancestor traversal, `/proc/meminfo` `MemAvailable` headroom, `/proc/pressure/memory` PSI `some avg10` limits, competing heavy-loader process checks, optional `--require-gpu-idle` (`nvidia-smi` MiB + compute-app checks), and `--exec` process-group `--timeout-seconds` termination with clean lock release.
+
+---
+
 ## Quickstart (Stock Python `>= 3.11`, Zero External Packages Required)
 
 ```bash
@@ -85,6 +96,10 @@ make test-3mode
 
 # Run deterministic synthetic CPU selftest (evidence_class = cpu_synthetic_preflight)
 make bench-cpu
+
+# Run standalone NVML profiler and host resource guard CPU self-tests
+python3 -I -B silisense/nvml_profiler.py --self-test --json
+python3 -I -B silisense/resource_guard.py --self-test --json
 ```
 
 ## License
